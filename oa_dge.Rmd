@@ -1,0 +1,128 @@
+---
+title: "Shoulder instability transcriptome analysis"
+author: "Mark Ziemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 7
+    fig_height: 7
+theme: cosmo
+---
+
+Source: https://github.com/markziemann/shoulder-instability-osteroarthritis
+
+# Introduction
+
+```{r,packages}
+
+suppressPackageStartupMessages({
+    library("zoo")
+    library("tidyverse")
+    library("reshape2")
+    library("DESeq2")
+    library("gplots")
+    library("fgsea")
+    library("MASS")
+    library("mitch")
+    library("eulerr")
+    library("limma")
+    library("topconfects")
+    library("kableExtra")
+})
+
+```
+
+## Import read counts
+
+```{r,importdata}
+
+tmp <- read.table("3col.tsv.gz",header=F)
+x <- as.matrix(acast(tmp, V2~V1, value.var="V3", fun.aggregate = sum))
+x <- as.data.frame(x)
+accession <- sapply((strsplit(rownames(x),"\\|")),"[[",2)
+symbol<-sapply((strsplit(rownames(x),"\\|")),"[[",6)
+x$geneid <- paste(accession,symbol)
+xx <- aggregate(. ~ geneid,x,sum)
+rownames(xx) <- xx$geneid
+colnames <- gsub("T0R","T0",colnames(xx))
+xx$geneid = NULL
+xx <- round(xx)
+
+head(xx)
+
+```
+
+## QC analysis
+
+Here I'll look at a few different quality control measures.
+
+```{r,qc1,fig.height=7,fig.width=7}
+
+par(mar=c(5,8,3,1))
+barplot(colSums(xx),horiz=TRUE,las=1,xlab="num reads")
+
+sums <- colSums(xx)
+sums <- sums[order(sums)]
+barplot(sums,horiz=TRUE,las=1,xlab="num reads")
+abline(v=15000000,col="red")
+
+```
+
+## Sample sheet
+
+```{r,samplesheet1}
+
+URL="https://raw.githubusercontent.com/markziemann/shoulder-instability-osteroarthritis/main/OA_samplesheet.tsv"
+ss <- read.table(URL,header=TRUE)
+ss$col <- as.numeric(factor(ss$TissueType))
+
+```
+
+## MDS plot
+
+Multidimensional scaling plot to show the variation between samples, very similar to PCA.
+
+```{r,mds,fig.height=7,fig.width=7}
+
+colvec <- c("orange2","pink","purple1","yellow","lightblue")
+cols <- rep(colvec,6)
+
+plot(cmdscale(dist(t(xx))), xlab="Coordinate 1", ylab="Coordinate 2", 
+  type = "p",bty="n",pch=19, cex=4, col=cols)
+text(cmdscale(dist(t(xx))), labels=ss$ParticipantID )
+
+legend("topright", inset=0.1, title="tissue type", c("B","C","F","M","S"),
+  pch=19,col=colvec, cex=1.5)
+
+```
+
+## Correlation heatmap
+
+```{r,cor,fig.height=7,fig.width=7}
+
+heatmap.2(cor(xx),trace="n",main="Pearson correlation heatmap")
+
+```
+
+## Findings
+
+There were 4 samples with fewer than 15M reads and this might impact data quality: 4002-42S, 4006-46B, 4005-42F and 4006-46C.
+
+MDS plot shows samples clustered by tissue type as expected.
+For example M samples to the right, F samples in the centre, C samples in the lower right and S samples between C and F.
+However the B samples were somewhat not clustered, which is something to look into.
+
+The result of the MDS is confirmed in the correlation heatmap.
+
+## Session information
+
+For reproducibility.
+
+```{r,sessioninfo}
+
+sessionInfo()
+
+```
