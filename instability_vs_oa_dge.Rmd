@@ -1,0 +1,448 @@
+---
+title: "Shoulder transcriptome analysis: instability vs osteoarthritis"
+author: "Mark Ziemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 7
+    fig_height: 7
+theme: cosmo
+---
+
+Source: https://github.com/markziemann/shoulder-instability-osteroarthritis
+
+# Introduction
+
+Here we are comparing the gene expression patterns of shoulder instability to shoulder osteroarthritis.
+We are doing this to identify the gene expression patterns which are specific to osteoarthritis.
+We are using the instability group as a control for this contrast as it is difficult to obtain specimens of completely normal shoulder tissue.
+
+We will be looking only at capsular tissues for the differential expression analysis.
+
+```{r,packages}
+
+suppressPackageStartupMessages({
+    library("zoo")
+    library("tidyverse")
+    library("reshape2")
+    library("DESeq2")
+    library("gplots")
+    library("fgsea")
+    library("MASS")
+    library("mitch")
+    library("eulerr")
+    library("limma")
+    library("topconfects")
+    library("kableExtra")
+})
+
+```
+
+## Import read counts
+
+Importing osteoarthritis (OA) and shoulder instability (SI) data separately.
+
+```{r,importdata}
+
+tmp <- read.table("3col_oa.tsv.gz",header=F)
+x <- as.matrix(acast(tmp, V2~V1, value.var="V3", fun.aggregate = sum))
+x <- as.data.frame(x)
+accession <- sapply((strsplit(rownames(x),"\\|")),"[[",2)
+symbol<-sapply((strsplit(rownames(x),"\\|")),"[[",6)
+x$geneid <- paste(accession,symbol)
+xx <- aggregate(. ~ geneid,x,sum)
+rownames(xx) <- xx$geneid
+colnames <- gsub("T0R","T0",colnames(xx))
+xx$geneid = NULL
+oa <- round(xx)
+head(oa)
+
+tmp <- read.table("3col_instability.tsv.gz",header=F)
+x <- as.matrix(acast(tmp, V2~V1, value.var="V3", fun.aggregate = sum))
+x <- as.data.frame(x)
+accession <- sapply((strsplit(rownames(x),"\\|")),"[[",2)
+symbol<-sapply((strsplit(rownames(x),"\\|")),"[[",6)
+x$geneid <- paste(accession,symbol)
+xx <- aggregate(. ~ geneid,x,sum)
+rownames(xx) <- xx$geneid
+colnames(xx) <- sapply(strsplit(colnames(xx),"_"),"[[",1)
+xx$geneid = NULL
+si <- round(xx)
+head(si)
+
+dim(oa)
+dim(si)
+
+```
+
+
+## QC analysis
+
+Here I'll look at a few different quality control measures.
+
+```{r,qc1,fig.height=7,fig.width=7}
+
+par(mar=c(5,8,3,1))
+barplot(colSums(oa),horiz=TRUE,las=1,xlab="OA num reads")
+sums <- colSums(oa)
+sums <- sums[order(sums)]
+barplot(sums,horiz=TRUE,las=1,xlab="OA num reads")
+abline(v=15000000,col="red")
+
+barplot(colSums(si),horiz=TRUE,las=1,xlab="SI num reads")
+sums <- colSums(si)
+sums <- sums[order(sums)]
+barplot(sums,horiz=TRUE,las=1,xlab="SI num reads")
+abline(v=15000000,col="red")
+
+
+```
+
+## MDS plot
+
+Multidimensional scaling plot to show the variation between all samples, very similar to PCA.
+
+```{r,mds,fig.height=7,fig.width=7}
+
+xx <- cbind(oa,si)
+
+mds <- cmdscale(dist(t(xx)))
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2", 
+  type = "p",bty="n",pch=19, cex=4 ,col="gray")
+text(mds, labels=rownames(mds) )
+
+```
+
+Now remove fat, bone and muscle, then plot capsular and synovium samples.
+
+```{r,mds2,fig.height=7,fig.width=7}
+
+dim(oa)
+
+oa <- oa[,grep("M",colnames(oa),invert=TRUE)]
+dim(oa)
+oa <- oa[,grep("B",colnames(oa),invert=TRUE)]
+dim(oa)
+oa <- oa[,grep("F",colnames(oa),invert=TRUE)]
+dim(oa)
+
+xx <- cbind(oa,si)
+
+mds <- cmdscale(dist(t(xx)))
+
+caps <- as.numeric(grepl("C",colnames(xx)))
+syno <- as.numeric(grepl("S$",colnames(xx))) * 2
+cols <- caps + syno
+cols <- cols +2
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=19, cex=4 ,col=cols)
+text(mds, labels=rownames(mds) )
+
+
+```
+
+Now remove synovium and regenerate the MDS plot for only the capsular samples.
+
+```{r,mds3}
+
+oa <- oa[,grep("S",colnames(oa),invert=TRUE)]
+dim(oa)
+xx <- cbind(oa,si)
+isoa <- as.numeric(grepl("C",colnames(xx)))
+
+mds <- cmdscale(dist(t(xx)))
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=19, cex=4 ,col=isoa+2)
+text(mds, labels=rownames(mds) )
+
+legend("topleft", legend=c("insta", "OA"),
+       col=c(2,3), cex=1, pch=19)
+
+```
+
+This looks promising that there is some clustering of samples, with OA sample in green on the right and
+instability samples on the left.
+We need to be cautious as these were sequences in separate runs, but it would appear that there is some 
+overlap between the groups which indicates that the batch effects might not be too severe.
+
+## Correlation heatmap
+
+```{r,cor,fig.height=7,fig.width=7}
+
+heatmap.2(cor(xx),trace="n",main="Pearson correlation heatmap")
+
+```
+
+
+## Sample sheet
+
+Also need to fix the patient identifiers to make it consistent between runs.
+
+```{r,samplesheet1}
+
+URL="https://raw.githubusercontent.com/markziemann/shoulder-instability-osteroarthritis/main/OA_patients.tsv"
+pat <- read.table(URL,header=TRUE,sep="\t")
+
+oa_pats <- colnames(xx)[grep("C",colnames(xx))]
+oa_pats <- sapply(strsplit(oa_pats,"-"),"[[",1)
+oa_pats <- paste("AD-CAB",oa_pats)
+oa_pats <- pat[which(pat$Record_number %in% oa_pats),"Unique_participant_ID"]
+
+insta_pats <- colnames(xx)[grep("SM",colnames(xx))]
+insta_pats <- sapply(strsplit(insta_pats,"-"),"[[",2)
+insta_pats <- as.integer(gsub("^0","",insta_pats))
+
+pats <- c(oa_pats,insta_pats)
+
+ss <- pat[which(pat$Unique_participant_ID %in% pats),]
+rownames(ss) <- ss$Unique_participant_ID
+ss$OA <- factor(ss$Unique_participant_ID>70)
+
+colnames(xx) <- pats
+
+```
+
+
+## Analysis of gene expression differences between instability and OA groups
+
+Don't forget to remove poorly detected genes from the matrix with a threshold of 10 reads per sample on average.
+
+I'm also reordering the count matrix columns (xx) so it is in the same order as the samplesheet.
+
+```{r,filter}
+
+dim(xx)
+xx <- xx[which(rowMeans(xx)>=10),]
+dim(xx)
+
+xx <- xx[,match( rownames(ss) , colnames(xx) )]
+
+```
+
+Not taking into consideration the effect of sex (will deal with that later).
+
+```{r,de01}
+
+dds <- DESeqDataSetFromMatrix(countData = xx , colData = ss, design = ~ OA )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>% kbl(caption = "Top gene expression differences between instability (ctrl) and OA (case) without consideration of sex") %>% kable_paper("hover", full_width = F)
+dgeb <- dge
+
+```
+
+Now repeat the analysis including the effect of sex.
+
+```{r,de02}
+
+ss$Sex <- factor(ss$Sex)
+
+dds <- DESeqDataSetFromMatrix(countData = xx , colData = ss, design = ~ Sex + OA )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>% kbl(caption = "Top gene expression differences between instability (ctrl) and OA (case) correcting for sex") %>% kable_paper("hover", full_width = F)
+dgeb <- dge
+
+```
+
+Here let's look at some plots.
+
+MA plot shows the average level and fold change of all detected genes.
+Volcano plot shows the fold change and the significance, as measured by -log(p-value).
+Significant genes are shown as red points.
+
+There are heatmaps of the top ranked genes by p-value.
+Above the gene expression values there is a bar in yellow/orange colours. 
+Yellow shows relatively low QuickDASH score and orange shows high score.
+
+```{r,deplots1}
+
+maplot <- function(de,contrast_name) {
+  sig <-subset(de, padj < 0.05 )
+  up <-rownames(subset(de, padj < 0.05 & log2FoldChange > 0))
+  dn <-rownames(subset(de, padj < 0.05 & log2FoldChange < 0))
+  GENESUP <- length(up)
+  GENESDN <- length(dn)
+  DET=nrow(de)
+  SUBHEADER = paste(GENESUP, "up, ", GENESDN, "down", DET, "detected")
+  ns <-subset(de, padj > 0.05 )
+  plot(log2(de$baseMean),de$log2FoldChange, 
+       xlab="log2 basemean", ylab="log2 foldchange",
+       pch=19, cex=0.5, col="dark gray",
+       main=contrast_name, cex.main=1)
+  points(log2(sig$baseMean),sig$log2FoldChange,
+         pch=19, cex=0.5, col="red")
+  mtext(SUBHEADER,cex = 1)
+}
+
+make_volcano <- function(de,name) {
+    sig <- subset(de,padj<0.05)
+    N_SIG=nrow(sig)
+    N_UP=nrow(subset(sig,log2FoldChange>0))
+    N_DN=nrow(subset(sig,log2FoldChange<0))
+    DET=nrow(de)
+    HEADER=paste(N_SIG,"@5%FDR,", N_UP, "up", N_DN, "dn", DET, "detected")
+    plot(de$log2FoldChange,-log10(de$pval),cex=0.5,pch=19,col="darkgray",
+        main=name, xlab="log2 FC", ylab="-log10 pval")
+    mtext(HEADER)
+    grid()
+    points(sig$log2FoldChange,-log10(sig$pval),cex=0.5,pch=19,col="red")
+}
+
+make_heatmap <- function(de,name,myss,mx,n=30){
+
+  colfunc <- colorRampPalette(c("blue", "white", "red"))
+  values <- as.numeric(myss$OA)
+  f <- colorRamp(c("yellow", "orange"))
+  rr <- range(values)
+  svals <- (values-rr[1])/diff(rr)
+  colcols <- rgb(f(svals)/255)
+  mxn <- mx/rowSums(mx)*1000000
+  x <- mxn[which(rownames(mxn) %in% rownames(head(de,n))),]
+  heatmap.2(as.matrix(x),trace="none",col=colfunc(25),scale="row", margins = c(10,15), cexRow=0.5, 
+    main=paste("Top ranked",n,"genes in",name) , ColSideColors = colcols  )
+
+}
+
+maplot(dge,"insta vs OA")
+make_volcano(dge,"insta vs OA")
+make_heatmap(dge,"insta vs OA",ss,xx,n=50)
+
+```
+
+## Pathway analysis with mitch
+
+```{r,mitch1}
+
+#download.file("https://reactome.org/download/current/ReactomePathways.gmt.zip", destfile="ReactomePathways.gmt.zip")
+#unzip("ReactomePathways.gmt.zip")
+genesets <- gmt_import("ReactomePathways.gmt")
+
+# gene table
+gt <- as.data.frame(rownames(xx))
+gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+
+m <- mitch_import(dge, DEtype="deseq2",geneTable=gt)
+m1 <- mitch_calc(m, genesets, priority="effect")
+head(m1$enrichment_result,20) %>% kbl(caption = "Top gene pathway differences using the parametric DE data") %>% kable_paper("hover", full_width = F)
+
+m1top <- subset(m1$enrichment_result,p.adjustANOVA<0.05)
+m1up <- subset(m1top,s.dist>0)$set
+m1dn <- subset(m1top,s.dist<0)$set
+
+```
+
+
+
+## Nonparametric analysis
+
+Looking at gene ranks might be a better option for comparisons across batches.
+
+The rank() function give the rank from lowest to highest and I'll use this for wilcox test.
+
+
+
+```{r,rank1}
+
+r <- apply(xx,2,rank)
+
+ctrl <- which(colnames(r) <70)
+case <- which(colnames(r) >70)
+
+suppressWarnings(
+wtres <- t(apply(r,1,function(x) {
+  wt <- wilcox.test(x[case] ,  x[ctrl] )
+  meanrankdiff <- mean(x[case]) - mean(x[ctrl])
+  unname(c(meanrankdiff,wt$p.value))
+})))
+
+colnames(wtres) <- c("meanrankdiff","pvalue")
+wtres <- as.data.frame(wtres)
+wtres <- wtres[order(wtres$pvalue),]
+wtres$fdr <- p.adjust(wtres$pvalue)
+
+top <- head(wtres,50)
+top <- top[order(top$meanrankdiff),]
+
+plot(top$meanrankdiff,1:nrow(top),bty="none",xlab="mean rank difference",ylab="gene",pch=19,cex=2,col="gray",main="Top differentially regulated genes")
+labels <- sapply(strsplit(rownames(top)," "),"[[",2)
+text(top$meanrankdiff,1:nrow(top),labels=labels,cex=0.7)
+
+top
+
+```
+
+## Pathway enrichment
+
+Here I'm using the mitch package and gene pathways from Reactome to understand the affected pathways separately for each tissue type.
+
+Reactome pathways downloaded 9th Dec 2021.
+
+```{r,mitch2}
+
+wtres$stat <- -log10(wtres$pvalue) * sign(wtres$meanrankdiff)
+wtres$gene <- sapply(strsplit(rownames(wtres)," "),"[[",2)
+
+wtres2<-wtres[,c("stat","gene")]
+wtres2 <- aggregate(. ~ gene, wtres2, max)
+rownames(wtres2) <- wtres2$gene
+wtres2$gene=NULL
+
+m2 <- mitch_calc(wtres2, genesets, priority="effect")
+head(m2$enrichment_result,20) %>% kbl(caption = "Top gene pathway differences using the nonparametric DE data") %>% kable_paper("hover", full_width = F)
+
+m2top <- subset(m2$enrichment_result,p.adjustANOVA<0.05)    
+m2up <- subset(m2top,s.dist>0)$set
+m2dn <- subset(m2top,s.dist<0)$set
+
+```
+
+## Compare parametric and nonparametric analyses
+
+These analyses gave similar results, so it suggests that there might not be such a huge batch effect impacting the results.
+
+```{r,euler1}
+
+
+v0 <- list("para up"=m1up,"para dn"=m1dn, "nonp up"=m2up, "nonp dn"=m2dn)
+
+str(v0)
+
+plot(euler(v0),quantities = TRUE, edges = "gray", main="Parametric and nonparametric DE analysis")
+
+```
+
+## Conclusion
+
+Based on the gene expression data, my guess is that there is no major technical batch effect between the two sample groups.
+That said, we can't be 100% sure that the differences observed are due to biological differences and not batch effects.
+To be certain, it would be a good idea to perform some validation analysis, either by testing the expression of some of these
+genes with another method like RTqPCR, or testing pathway activation biochemically.
+
+As OA is thought to associate with inflammation, I was expecting to see these pathways activated.
+However OA is different to rheumatoid arthritis which definitely has an autoimmune component to it.
+
+What we did observe was a downregulation of many signaling pathways such as RORA, RAC1, NOTCH2, CREB1, PI3K and others, 
+while translation, amino acid recycling, nonsense mediated decay, degradation of mitotic proteins, and p53 pathways were upregulated.
+
+## Session information
+
+For reproducibility.
+
+```{r,sessioninfo}
+
+sessionInfo()
+
+```
