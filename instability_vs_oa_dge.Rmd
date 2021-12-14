@@ -25,6 +25,7 @@ We will be looking only at capsular tissues for the differential expression anal
 ```{r,packages}
 
 suppressPackageStartupMessages({
+    library(R.utils)
     library("zoo")
     library("tidyverse")
     library("reshape2")
@@ -78,7 +79,6 @@ dim(si)
 
 ```
 
-
 ## QC analysis
 
 Here I'll look at a few different quality control measures.
@@ -97,7 +97,6 @@ sums <- colSums(si)
 sums <- sums[order(sums)]
 barplot(sums,horiz=TRUE,las=1,xlab="SI num reads")
 abline(v=15000000,col="red")
-
 
 ```
 
@@ -143,7 +142,6 @@ plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
   type = "p",bty="n",pch=19, cex=4 ,col=cols)
 text(mds, labels=rownames(mds) )
 
-
 ```
 
 Now remove synovium and regenerate the MDS plot for only the capsular samples.
@@ -179,7 +177,6 @@ heatmap.2(cor(xx),trace="n",main="Pearson correlation heatmap")
 
 ```
 
-
 ## Sample sheet
 
 Also need to fix the patient identifiers to make it consistent between runs.
@@ -207,7 +204,6 @@ ss$OA <- factor(ss$Unique_participant_ID>70)
 colnames(xx) <- pats
 
 ```
-
 
 ## Analysis of gene expression differences between instability and OA groups
 
@@ -254,6 +250,9 @@ zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 dge[1:20,1:6] %>% kbl(caption = "Top gene expression differences between instability (ctrl) and OA (case) correcting for sex") %>% kable_paper("hover", full_width = F)
 dgeb <- dge
+
+write.table(dgeb,file="intsa_vs_oa.tsv",sep="\t",quote=FALSE,row.names=TRUE)
+gzip("intsa_vs_oa.tsv")
 
 ```
 
@@ -336,11 +335,15 @@ gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
 
 m <- mitch_import(dge, DEtype="deseq2",geneTable=gt)
 m1 <- mitch_calc(m, genesets, priority="effect")
-head(m1$enrichment_result,20) %>% kbl(caption = "Top gene pathway differences using the parametric DE data") %>% kable_paper("hover", full_width = F)
+head(m1$enrichment_result,20) %>% 
+  kbl(caption = "Top gene pathway differences using the parametric DE data") %>% 
+  kable_paper("hover", full_width = F)
 
 m1top <- subset(m1$enrichment_result,p.adjustANOVA<0.05)
 m1up <- subset(m1top,s.dist>0)$set
 m1dn <- subset(m1top,s.dist<0)$set
+
+mitch_report(m1,outfile="mitchres.html",overwrite=TRUE)
 
 ```
 
