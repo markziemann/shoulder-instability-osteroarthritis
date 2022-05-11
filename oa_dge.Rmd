@@ -16,6 +16,20 @@ Source: https://github.com/markziemann/shoulder-instability-osteroarthritis
 
 # Introduction
 
+Here we are analysing the gene expression of six patients in these tissues.
+
+B: Bone
+
+C: Capsule 
+
+F: Fat
+
+M: Muscle
+
+S: Synovium 
+
+They have a range of QuickDASH scores which I will examine.
+
 ```{r,packages}
 
 suppressPackageStartupMessages({
@@ -50,7 +64,7 @@ rownames(xx) <- xx$geneid
 colnames <- gsub("T0R","T0",colnames(xx))
 xx$geneid = NULL
 xx <- round(xx)
-
+colnames(xx) <- sapply(strsplit(colnames(xx),"-"),"[[",2)
 head(xx)
 
 ```
@@ -78,6 +92,12 @@ abline(v=15000000,col="red")
 URL="https://raw.githubusercontent.com/markziemann/shoulder-instability-osteroarthritis/main/OA_samplesheet.tsv"
 ss <- read.table(URL,header=TRUE)
 ss$col <- as.numeric(factor(ss$TissueType))
+ss$id <- sapply(strsplit(ss$Dataset,"-"),"[[",1)
+ss$Dataset <- sapply(strsplit(ss$Dataset,"-"),"[[",2)
+
+URL="https://raw.githubusercontent.com/markziemann/shoulder-instability-osteroarthritis/main/OA_patients.tsv"
+pat <- read.table(URL,header=TRUE,sep="\t")
+pat$id <- sapply(strsplit(pat$Record_number," "),"[[",2)
 
 ```
 
@@ -94,7 +114,7 @@ plot(cmdscale(dist(t(xx))), xlab="Coordinate 1", ylab="Coordinate 2",
   type = "p",bty="n",pch=19, cex=4, col=cols)
 text(cmdscale(dist(t(xx))), labels=ss$ParticipantID )
 
-legend("topright", inset=0.1, title="tissue type", c("B","C","F","M","S"),
+legend("topright", inset=0.1, title="tissue type", c("Bone","Capsule","Fat","Muscle","Synovium"),
   pch=19,col=colvec, cex=1.5)
 
 ```
@@ -107,8 +127,6 @@ heatmap.2(cor(xx),trace="n",main="Pearson correlation heatmap")
 
 ```
 
-## Findings
-
 There were 4 samples with fewer than 15M reads and this might impact data quality: 4002-42S, 4006-46B, 4005-42F and 4006-46C.
 
 MDS plot shows samples clustered by tissue type as expected.
@@ -116,6 +134,311 @@ For example M samples to the right, F samples in the centre, C samples in the lo
 However the B samples were somewhat not clustered, which is something to look into.
 
 The result of the MDS is confirmed in the correlation heatmap.
+
+
+## Separate data by tissue
+
+Also a good point to filter out any genes with low expression (average < 10 counts).
+
+Below I show the dimensions of each dataset (separated by tissue type), in terms of number of genes detected
+and samples.
+
+```{r,sep1}
+
+ssb <- subset(ss,TissueType=="B")
+xxb <- xx[,which(colnames(xx) %in% ssb$Dataset)]
+xxb <- xxb[which(rowMeans(xxb)>10),]
+
+ssc <- subset(ss,TissueType=="C")
+xxc <- xx[,which(colnames(xx) %in% ssc$Dataset)]
+xxc <- xxc[which(rowMeans(xxc)>10),]
+
+ssf <- subset(ss,TissueType=="F")
+xxf <- xx[,which(colnames(xx) %in% ssf$Dataset)]
+xxf <- xxf[which(rowMeans(xxf)>10),]
+
+ssm <- subset(ss,TissueType=="M")
+xxm <- xx[,which(colnames(xx) %in% ssm$Dataset)]
+xxm <- xxm[which(rowMeans(xxm)>10),]
+
+sss <- subset(ss,TissueType=="S")
+xxs <- xx[,which(colnames(xx) %in% sss$Dataset)]
+xxs <- xxs[which(rowMeans(xxs)>10),]
+
+lapply(list(xx,xxb,xxc,xxf,xxm,xxs),dim)
+
+```
+
+## Analysis of gene expression correlates with basline quickdash scores
+
+```{r,quickdash1}
+
+ssb$quickdash <- scale(pat[match(ssb$id,pat$id),"QuickDASH_baseline"])
+dds <- DESeqDataSetFromMatrix(countData = xxb , colData = ssb, design = ~ quickdash )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>% kbl(caption = "Top gene expression correlates with QuickDASH in bone") %>% kable_paper("hover", full_width = F)
+dgeb <- dge
+write.table(dgeb,file="deseq2_bone.tsv",quote=FALSE,sep='\t')
+
+ssc$quickdash <- scale(pat[match(ssc$id,pat$id),"QuickDASH_baseline"])
+dds <- DESeqDataSetFromMatrix(countData = xxc , colData = ssc, design = ~ quickdash )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>% kbl(caption = "Top gene expression correlates with QuickDASH in capsule") %>% kable_paper("hover", full_width = F)
+dgec <- dge
+write.table(dgec,file="deseq2_capsule.tsv",quote=FALSE,sep='\t')
+
+ssf$quickdash <- scale(pat[match(ssf$id,pat$id),"QuickDASH_baseline"])
+dds <- DESeqDataSetFromMatrix(countData = xxf , colData = ssf, design = ~ quickdash )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>% kbl(caption = "Top gene expression correlates with QuickDASH in fat") %>% kable_paper("hover", full_width = F)
+dgef <- dge
+write.table(dgef,file="deseq2_fat.tsv",quote=FALSE,sep='\t')
+
+ssm$quickdash <- scale(pat[match(ssm$id,pat$id),"QuickDASH_baseline"])
+dds <- DESeqDataSetFromMatrix(countData = xxm , colData = ssm, design = ~ quickdash )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>% kbl(caption = "Top gene expression correlates with QuickDASH in muscle") %>% kable_paper("hover", full_width = F)
+dgem <- dge
+write.table(dgem,file="deseq2_muscle.tsv",quote=FALSE,sep='\t')
+
+sss$quickdash <- scale(pat[match(sss$id,pat$id),"QuickDASH_baseline"])
+dds <- DESeqDataSetFromMatrix(countData = xxs , colData = sss, design = ~ quickdash )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>% kbl(caption = "Top gene expression correlates with QuickDASH in synovium") %>% kable_paper("hover", full_width = F)
+dges <- dge
+write.table(dges,file="deseq2_synovium.tsv",quote=FALSE,sep='\t')
+
+```
+
+Here let's look at some plots.
+
+MA plot shows the avrage level and fold change of all detected genes.
+Volcano plot shows the fold change and the significance, as measured by -log(p-value).
+Significant genes are shown as red points.
+
+There are heatmaps of the top ranked genes by p-value.
+Above the gene expression values there is a bar in yellow/orange colours. 
+Yellow shows relatively low QuickDASH score and orange shows high score.
+
+```{r,deplots1}
+
+maplot <- function(de,contrast_name) {
+  sig <-subset(de, padj < 0.05 )
+  up <-rownames(subset(de, padj < 0.05 & log2FoldChange > 0))
+  dn <-rownames(subset(de, padj < 0.05 & log2FoldChange < 0))
+  GENESUP <- length(up)
+  GENESDN <- length(dn)
+  DET=nrow(de)
+  SUBHEADER = paste(GENESUP, "up, ", GENESDN, "down", DET, "detected")
+  ns <-subset(de, padj > 0.05 )
+  plot(log2(de$baseMean),de$log2FoldChange, 
+       xlab="log2 basemean", ylab="log2 foldchange",
+       pch=19, cex=0.5, col="dark gray",
+       main=contrast_name, cex.main=1)
+  points(log2(sig$baseMean),sig$log2FoldChange,
+         pch=19, cex=0.5, col="red")
+  mtext(SUBHEADER,cex = 1)
+}
+
+make_volcano <- function(de,name) {
+    sig <- subset(de,padj<0.05)
+    N_SIG=nrow(sig)
+    N_UP=nrow(subset(sig,log2FoldChange>0))
+    N_DN=nrow(subset(sig,log2FoldChange<0))
+    DET=nrow(de)
+    HEADER=paste(N_SIG,"@5%FDR,", N_UP, "up", N_DN, "dn", DET, "detected")
+    plot(de$log2FoldChange,-log10(de$pval),cex=0.5,pch=19,col="darkgray",
+        main=name, xlab="log2 FC", ylab="-log10 pval", xlim=c(-6,6))
+    mtext(HEADER)
+    grid()
+    points(sig$log2FoldChange,-log10(sig$pval),cex=0.5,pch=19,col="red")
+}
+
+make_heatmap <- function(de,name,myss,mx,n=30){
+  colfunc <- colorRampPalette(c("blue", "white", "red"))
+  values <- myss$quickdash
+  f <- colorRamp(c("yellow", "orange"))
+  rr <- range(values)
+  svals <- (values-rr[1])/diff(rr)
+  colcols <- rgb(f(svals)/255)
+  mxn <- mx/rowSums(mx)*1000000
+  x <- mxn[which(rownames(mxn) %in% rownames(head(de,n))),]
+  heatmap.2(as.matrix(x),trace="none",col=colfunc(25),scale="row", margins = c(10,25), cexRow=1.5, 
+    main=paste("Top ranked",n,"genes in",name) , ColSideColors = colcols )
+}
+
+maplot(dgeb,"bone")
+make_volcano(dgeb,"bone")
+make_heatmap(dgeb,"bone",ssb,xxb,n=20)
+
+maplot(dgec,"capsule")
+make_volcano(dgec,"capsule")
+make_heatmap(dgec,"capsule",ssc,xxc,n=20)
+
+maplot(dgef,"fat")
+make_volcano(dgef,"fat")
+make_heatmap(dgef,"fat",ssf,xxf,n=20)
+
+maplot(dgem,"muscle")
+make_volcano(dgem,"muscle")
+make_heatmap(dgem,"muscle",ssm,xxm,n=20)
+
+maplot(dges,"synovium")
+make_volcano(dges,"synovium")
+make_heatmap(dges,"synovium",sss,xxs,n=20)
+
+```
+
+## Pathway enrichment
+
+Here I'm using the mitch package and gene pathways from Reactome to understand the affected pathways separately for each tissue type.
+
+Reactome pathways downloaded 24th Nov 2021.
+
+```{r,mitch1}
+
+#download.file("https://reactome.org/download/current/ReactomePathways.gmt.zip", destfile="ReactomePathways.gmt.zip")
+#unzip("ReactomePathways.gmt.zip")
+genesets <- gmt_import("ReactomePathways.gmt")
+
+# gene table
+gt <- as.data.frame(rownames(xx))
+gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+
+m <- mitch_import(dgeb, DEtype="deseq2",geneTable=gt)
+mb <- mitch_calc(m, genesets, priority="significance")
+head(mb$enrichment_result,20) %>% kbl(caption = "Top gene pathway correlates with QuickDASH in bone") %>% kable_paper("hover", full_width = F)
+write.table(mb$enrichment_result,file="mitch_bone.tsv",quote=FALSE,sep='\t')
+
+m <- mitch_import(dgec, DEtype="deseq2",geneTable=gt)
+mc <- mitch_calc(m, genesets, priority="significance")
+head(mc$enrichment_result,20) %>% kbl(caption = "Top gene pathway correlates with QuickDASH in capsule") %>% kable_paper("hover", full_width = F)
+write.table(mc$enrichment_result,file="mitch_capsule.tsv",quote=FALSE,sep='\t')
+
+m <- mitch_import(dgef, DEtype="deseq2",geneTable=gt)
+mf <- mitch_calc(m, genesets, priority="significance")
+head(mf$enrichment_result,20) %>% kbl(caption = "Top gene pathway correlates with QuickDASH in fat") %>% kable_paper("hover", full_width = F)
+write.table(mf$enrichment_result,file="mitch_fat.tsv",quote=FALSE,sep='\t')
+
+m <- mitch_import(dgem, DEtype="deseq2",geneTable=gt)
+mm <- mitch_calc(m, genesets, priority="significance")
+head(mm$enrichment_result,20) %>% kbl(caption = "Top gene pathway correlates with QuickDASH in muscle") %>% kable_paper("hover", full_width = F)
+write.table(mm$enrichment_result,file="mitch_muscle.tsv",quote=FALSE,sep='\t')
+
+m <- mitch_import(dges, DEtype="deseq2",geneTable=gt)
+ms <- mitch_calc(m, genesets, priority="significance")
+head(ms$enrichment_result,20) %>% kbl(caption = "Top gene pathway correlates with QuickDASH in synovium") %>% kable_paper("hover", full_width = F)
+write.table(ms$enrichment_result,file="mitch_synovium.tsv",quote=FALSE,sep='\t')
+
+```
+
+## Mitch 1D reports
+
+```{r,mitchreport1,include=FALSE}
+
+mitch_report(res=mb, outfile="mitch_bone.html", overwrite = TRUE)
+mitch_report(res=mc, outfile="mitch_caps.html", overwrite = TRUE)
+mitch_report(res=mf, outfile="mitch_fat.html", overwrite = TRUE)
+mitch_report(res=mm, outfile="mitch_musc.html", overwrite = TRUE)
+mitch_report(res=ms, outfile="mitch_syno.html", overwrite = TRUE)
+
+```
+
+Here I'm using the mitch package to identify the most enriched pathways across all tissues.
+
+There is a heatmap showing the QuickDASH association correlation across tissues.
+
+Then there is the results of the multi-contrast pathway analysis with mitch in the form of a table and heatmap of pathway enrichment.	
+
+
+```{r,mitch2}
+
+x <- list("bone"=dgeb, "capsule"=dgec, "fat"=dgef , "muscle"=dgem, "synovium"=dges)
+
+y <- mitch_import(x, DEtype="deseq2",geneTable=gt)
+
+heatmap.2(cor(y,method="s"),trace="none",scale="none",margins = c(10,10),main="Spearman correlation across tissues") 
+
+res <- mitch_calc(y, genesets, priority="significance")
+
+head(res$enrichment_result,30) %>% kbl(caption = "Top gene pathway correlates with QuickDASH across all tissues") %>% kable_paper("hover", full_width = F)
+
+pw <- res$enrichment_result[1:30,4:8]
+rownames(pw) <- res$enrichment_result[1:30,1]
+heatmap.2(as.matrix(pw),trace="none",col=colfunc(25),scale="none", margins = c(10,25), cexRow=0.6,cexCol=0.7,
+    main="Top ranked pathways")
+
+```
+
+## Mitch 5D report
+
+```{r,mitchreport2,include=FALSE}
+
+write.table(res$enrichment_result,file="mitch_multi.tsv",quote=FALSE,sep='\t')
+
+mitch_report(res=res, outfile="mitch_multi.html", overwrite = TRUE)
+
+```
+
+Now I will look at the expression of the top ranked pathway genes (Creation of C4 and C2 activators) across the whole experiment.
+It will give us a good idea about what's going on.
+
+```{r,toppw}
+
+set <- head(res$enrichment_result$set,1)
+genes <- genesets[[set]]
+genes <- gt[match(genes,gt$gene),1]
+xxn <- xx/rowSums(xx)*1000000
+mx <- as.matrix(xxn[which(rownames(xxn) %in% genes),])
+rownames(mx) <- sapply(strsplit(rownames(mx)," "),"[[",2)
+colfunc <- colorRampPalette(c("blue", "white", "red"))
+
+parti <-  substr(colnames(mx), 1, 2)
+values <- as.numeric(sss[match(parti,sss$ParticipantID),"quickdash"])
+f <- colorRamp(c("yellow", "orange"))
+rr <- range(values)
+svals <- (values-rr[1])/diff(rr)
+colcols <- rgb(f(svals)/255)
+
+heatmap.2(mx,trace="none",col=colfunc(25),scale="row", margins = c(5,10), 
+    cexRow=0.7, cexCol=0.7, main=set , ColSideColors = colcols )
+mtext("yellow=low quickdash, orange=high quickdash")
+
+```
+
+It looks like expression of immunoglubulins in some of the bone samples could explain the observed pathway enrichment.
+
+## Conclusions
+
+The number of differentially expressed genes was relatively small.
+This is to be expected given that the sample number (n) is very small.
+Still, there were some statistically significant (FDR<0.05) differentially expressed genes in each tissue type (except in muscle).
+Some of the top ranked genes appear to be involved in inflammation and response to stress including interleukins, chemokines,
+complement components, nuclear response factors and immediate early response genes.
+Some of these were up and down regulated, which suggests a shifting balance between inflammatory and antiinflammatory signaling 
+pathways.
+Using a gene expression heatmap of one of the top pathways, we see it is dominated by expression of innumoglobulins in bone.
+This could be an important finding or it might be due to contamination of bone samples with blood.
 
 ## Session information
 
