@@ -21,10 +21,23 @@ giving us a discrete variable which takes into account BMI,
 Fasting glucose, Cholesterol and Blood pressure in accordance with
 the international diabetes federation definition. 
 
+Metabolic syndrome: N = 9 patients (all in the primary OA/cuff arthropathy group)
+
+Primary OA: N = 13 patients
+
+Cuff arthropathy: N = 7 patients
+
+Instability (control group): N = 26
+
+
 2. Can we predict gene expression profile in capsular tissue biopsies
 of patients undergoing shoulder stabilisation for shoulder instability
 using capsular tissue biopsies in patients with cuff arthropathy and
 primary osteoarthritis?
+Correct me if I'm wrong, but this is a cross tissue expression analysis to predict 
+gene expression profiles in the instability group?
+In doing so I assume if we cannot predict gene expression profiles in the instability
+group – this suggests the differences are disease specific (OA/Cuff arthropathy)?
 
 ### Rotator cuff group
 
