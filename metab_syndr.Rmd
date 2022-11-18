@@ -27,6 +27,9 @@ giving us a discrete variable which takes into account BMI,
 Fasting glucose, Cholesterol and Blood pressure in accordance with
 the international diabetes federation definition.
 
+Also I will conduct a comparison of cuff arth to primary OA control for age sex and CRP.
+
+
 ```{r,packages}
 
 suppressPackageStartupMessages({
@@ -47,6 +50,59 @@ suppressPackageStartupMessages({
 
 ```
 
+## Functions for plots
+
+```{r,plotfunc}
+
+maplot <- function(de,contrast_name) {
+  sig <-subset(de, padj < 0.05 )
+  up <-rownames(subset(de, padj < 0.05 & log2FoldChange > 0))
+  dn <-rownames(subset(de, padj < 0.05 & log2FoldChange < 0))
+  GENESUP <- length(up)
+  GENESDN <- length(dn)
+  DET=nrow(de)
+  SUBHEADER = paste(GENESUP, "up, ", GENESDN, "down", DET, "detected")
+  ns <-subset(de, padj > 0.05 )
+  plot(log2(de$baseMean),de$log2FoldChange, 
+       xlab="log2 basemean", ylab="log2 foldchange",
+       pch=19, cex=0.5, col="dark gray",
+       main=contrast_name, cex.main=1)
+  points(log2(sig$baseMean),sig$log2FoldChange,
+         pch=19, cex=0.5, col="red")
+  mtext(SUBHEADER,cex = 1)
+}
+
+make_volcano <- function(de,name) {
+    sig <- subset(de,padj<0.05)
+    N_SIG=nrow(sig)
+    N_UP=nrow(subset(sig,log2FoldChange>0))
+    N_DN=nrow(subset(sig,log2FoldChange<0))
+    DET=nrow(de)
+    HEADER=paste(N_SIG,"@5%FDR,", N_UP, "up", N_DN, "dn", DET, "detected")
+    plot(de$log2FoldChange,-log10(de$pval),cex=0.5,pch=19,col="darkgray",
+        main=name, xlab="log2 FC", ylab="-log10 pval")
+    mtext(HEADER)
+    grid()
+    points(sig$log2FoldChange,-log10(sig$pval),cex=0.5,pch=19,col="red")
+}
+
+make_heatmap <- function(de,name,groups,mx,n=30){
+
+  colfunc <- colorRampPalette(c("blue", "white", "red"))
+  values <- groups
+  f <- colorRamp(c("yellow", "orange"))
+  rr <- range(values)
+  svals <- (values-rr[1])/diff(rr)
+  colcols <- rgb(f(svals)/255)
+  mxn <- mx/rowSums(mx)*1000000
+  x <- mxn[which(rownames(mxn) %in% rownames(head(de,n))),]
+  heatmap.2(as.matrix(x),trace="none",col=colfunc(25),scale="row", margins = c(10,15), cexRow=0.5, 
+    main=paste("Top ranked",n,"genes in",name) , ColSideColors = colcols  )
+
+}
+
+```
+
 ## Sample sheet
 
 ```{r,samplesheet}
@@ -58,9 +114,7 @@ rownames(ss) <- gsub("-",".",rownames(ss))
 
 ss <- ss[order(rownames(ss)),]
 
-
 ```
-
 
 ## Import read counts
 
@@ -117,6 +171,9 @@ colnames(axx)[!colnames(axx) %in% rownames(ss)]
 
 ```
 
+There are some datasets not included in the sample sheet so I will ask Sam to get
+those clinical data so they can be included in future.
+
 ## QC analysis
 
 Here I'll look at a few different quality control measures.
@@ -132,6 +189,8 @@ abline(v=15000000,col="red")
 
 ```
 
+Some of those read counts are quite low.
+
 ## MDS plot
 
 Multidimensional scaling plot to show the variation between all samples, very similar to PCA.
@@ -146,228 +205,264 @@ text(mds, labels=rownames(mds) )
 
 ```
 
-## Metabolic syndrome
+## Compare cuff arth to primary OA control for age sex and CRP in bone
+
+Need to:
+
+* select Cuff and OA samples
+
+* select bone datasets only
+
+```{r,dge0b}
+
+ss0 <- subset(ss,Cuff_Arthropathy=="Yes" | Primary_OA=="Yes")
+
+ss0b <- subset(ss0,Tissue=="bone")
+
+ss0b %>%
+  kbl(caption = "sample sheet for cuff arth vs OA (bone)") %>%
+  kable_paper("hover", full_width = F)
+
+ss0b$Metabolic_Syndrome
+ss0b$Age
+ss0b$Sex
+
+x0b <- axx[,colnames(axx) %in% rownames(ss0b)]
+dim(x0b)
+x0b <- x0b[which(rowMeans(x0b)>=10),]
+dim(x0b)
+
+x0b <- x0b[,order(colnames(x0b))]
+ss0b <- ss0b[order(rownames(ss0b)),]
+
+dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Primary_OA)
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
+  kable_paper("hover", full_width = F)
+
+dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Age + Sex + CRP + Primary_OA )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients adjusted for age, sex and CRP.") %>%
+  kable_paper("hover", full_width = F)
+
+dge0b <- dge
+
+maplot(dge0b,"rotator cuff vs OA in bone")
+make_volcano(dge0b,"rotator cuff vs OA in bone")
+make_heatmap(dge0b,"rotator cuff vs OA in bone",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
+
+```
+
+Now for rotator cuff vs OA in capsule.
+
+```{r,dge0c}
+
+ss0 <- subset(ss,Cuff_Arthropathy=="Yes" | Primary_OA=="Yes")
+
+ss0c <- subset(ss0,Tissue=="capsule")
+
+ss0c %>%
+  kbl(caption = "sample sheet for cuff arth vs OA (capsule)") %>%
+  kable_paper("hover", full_width = F)
+
+ss0c$Metabolic_Syndrome
+ss0c$Age
+ss0c$Sex
+
+x0c <- axx[,colnames(axx) %in% rownames(ss0c)]
+dim(x0c)
+x0c <- x0c[which(rowMeans(x0c)>=10),]
+dim(x0c)
+
+x0c <- x0c[,order(colnames(x0c))]
+ss0c <- ss0c[order(rownames(ss0c)),]
+
+dds <- DESeqDataSetFromMatrix(countData = x0c , colData = ss0c, design = ~ Primary_OA)
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
+  kable_paper("hover", full_width = F)
+
+dds <- DESeqDataSetFromMatrix(countData = x0c , colData = ss0c, design = ~ Age + Sex + CRP + Primary_OA )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients adjusted for age, sex and CRP.") %>%
+  kable_paper("hover", full_width = F)
+
+dge0c <- dge
+
+maplot(dge0c,"rotator cuff vs OA in capsule")
+make_volcano(dge0c,"rotator cuff vs OA in capsule")
+make_heatmap(dge0c,"rotator cuff vs OA in capsule",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
+
+```
+
+## The effect of metabolic syndrome in OA in bone
 
 Need to:
 
 * select bone datasets only
 
 * look at the effect of metabolic syndrome in OA (ss1).
-Rotator cuff (RC) and instability (Insta) dont have bone data.
 
-```{r,dge1}
+```{r,dge1b}
 
-ss1 <- subset(ss,Tissue=="bone" & Case=="OA")
-ss1$Metabolic_Syndrome
-ss1$Age
-ss1$Sex
+ss1 <- subset(ss,Case=="OA")
 
-x1 <- axx[,colnames(axx) %in% rownames(ss1)]
-dim(x1)
-x1 <- x1[which(rowMeans(x1)>=10),]
-dim(x1)
+ss1b <- subset(ss1,Tissue=="bone")
 
-dds <- DESeqDataSetFromMatrix(countData = x1 , colData = ss1, design = ~ Metabolic_Syndrome )
+ss1b$Metabolic_Syndrome
+ss1b$Age
+ss1b$Sex
+
+x1b <- axx[,colnames(axx) %in% rownames(ss1b)]
+dim(x1b)
+x1b <- x1b[which(rowMeans(x1b)>=10),]
+dim(x1b)
+
+x1b <- x1b[,order(colnames(x1b))]
+ss1b <- ss1b[order(rownames(ss1b)),]
+
+dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 dge[1:20,1:6] %>%
-  kbl(caption = "Top gene expression differences in bone between OA patients with and without metabolic syndrome.") %>%
+  kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome.") %>%
   kable_paper("hover", full_width = F)
-dge01_basic <- dge
 
-dds <- DESeqDataSetFromMatrix(countData = x1 , colData = ss1, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
+dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 dge[1:20,1:6] %>%
-  kbl(caption = "Top gene expression differences in bone between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
+  kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
-dge01 <- dge
-
-
-```
-
-Now look at some plots.
-TODO: MDS plot
-
-```{r,deplots1}
-
-maplot <- function(de,contrast_name) {
-  sig <-subset(de, padj < 0.05 )
-  up <-rownames(subset(de, padj < 0.05 & log2FoldChange > 0))
-  dn <-rownames(subset(de, padj < 0.05 & log2FoldChange < 0))
-  GENESUP <- length(up)
-  GENESDN <- length(dn)
-  DET=nrow(de)
-  SUBHEADER = paste(GENESUP, "up, ", GENESDN, "down", DET, "detected")
-  ns <-subset(de, padj > 0.05 )
-  plot(log2(de$baseMean),de$log2FoldChange, 
-       xlab="log2 basemean", ylab="log2 foldchange",
-       pch=19, cex=0.5, col="dark gray",
-       main=contrast_name, cex.main=1)
-  points(log2(sig$baseMean),sig$log2FoldChange,
-         pch=19, cex=0.5, col="red")
-  mtext(SUBHEADER,cex = 1)
-}
-
-make_volcano <- function(de,name) {
-    sig <- subset(de,padj<0.05)
-    N_SIG=nrow(sig)
-    N_UP=nrow(subset(sig,log2FoldChange>0))
-    N_DN=nrow(subset(sig,log2FoldChange<0))
-    DET=nrow(de)
-    HEADER=paste(N_SIG,"@5%FDR,", N_UP, "up", N_DN, "dn", DET, "detected")
-    plot(de$log2FoldChange,-log10(de$pval),cex=0.5,pch=19,col="darkgray",
-        main=name, xlab="log2 FC", ylab="-log10 pval")
-    mtext(HEADER)
-    grid()
-    points(sig$log2FoldChange,-log10(sig$pval),cex=0.5,pch=19,col="red")
-}
-
-make_heatmap <- function(de,name,myss,mx,n=30){
-
-  colfunc <- colorRampPalette(c("blue", "white", "red"))
-  values <- as.numeric(myss$OA)
-  f <- colorRamp(c("yellow", "orange"))
-  rr <- range(values)
-  svals <- (values-rr[1])/diff(rr)
-  colcols <- rgb(f(svals)/255)
-  mxn <- mx/rowSums(mx)*1000000
-  x <- mxn[which(rownames(mxn) %in% rownames(head(de,n))),]
-  heatmap.2(as.matrix(x),trace="none",col=colfunc(25),scale="row", margins = c(10,15), cexRow=0.5, 
-    main=paste("Top ranked",n,"genes in",name) , ColSideColors = colcols  )
-
-}
-
-maplot(dge,"insta vs OA")
-make_volcano(dge,"insta vs OA")
-make_heatmap(dge,"insta vs OA",ss,xx,n=50)
+dge1b <- dge
 
 ```
 
-## Pathway analysis with mitch
+## The effect of metabolic syndrome in OA in capsule
 
-```{r,mitch1}
+```{r,dge1c}
 
-#download.file("https://reactome.org/download/current/ReactomePathways.gmt.zip", destfile="ReactomePathways.gmt.zip")
-#unzip("ReactomePathways.gmt.zip")
-genesets <- gmt_import("ReactomePathways.gmt")
+ss1 <- subset(ss,Case=="OA")
 
-# gene table
-gt <- as.data.frame(rownames(xx))
-gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+ss1c <- subset(ss1,Tissue=="capsule")
 
-m <- mitch_import(dge, DEtype="deseq2",geneTable=gt)
-m1 <- mitch_calc(m, genesets, priority="effect")
-head(m1$enrichment_result,20) %>% 
-  kbl(caption = "Top gene pathway differences using the parametric DE data") %>% 
+ss1c$Metabolic_Syndrome
+ss1c$Age
+ss1c$Sex
+
+x1c <- axx[,colnames(axx) %in% rownames(ss1c)]
+dim(x1c)
+x1c <- x1c[which(rowMeans(x1c)>=10),]
+dim(x1c)
+
+x1c <- x1c[,order(colnames(x1c))]
+ss1c <- ss1c[order(rownames(ss1c)),]
+
+dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome.") %>%
   kable_paper("hover", full_width = F)
 
-m1top <- subset(m1$enrichment_result,p.adjustANOVA<0.05)
-m1up <- subset(m1top,s.dist>0)$set
-m1dn <- subset(m1top,s.dist<0)$set
+dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
+  kable_paper("hover", full_width = F)
+dge1c <- dge
 
-mitch_report(m1,outfile="insta_vs_oa_mitchres.html",overwrite=TRUE)
+```
+
+## The effect of metabolic syndrome in rotator cuff arthropathy in capsule
+
+Need to:
+
+* select bone datasets only
+
+* look at the effect of metabolic syndrome in OA (ss1).
+
+```{r,dge2b}
+
+ss2 <- subset(ss,Case=="RC")
+
+ss2c <- subset(ss2,Tissue=="capsule")
+
+ss2c$Metabolic_Syndrome
+ss2c$Age
+ss2c$Sex
+
+x2c <- axx[,colnames(axx) %in% rownames(ss2c)]
+dim(x2c)
+x2c <- x2c[which(rowMeans(x2c)>=10),]
+dim(x2c)
+
+x2c <- x2c[,order(colnames(x2c))]
+ss2c <- ss2c[order(rownames(ss2c)),]
+
+ss2c <- subset(ss2c,Metabolic_Syndrome=="No" | Metabolic_Syndrome=="Yes")
+x2c <- x2c[,colnames(x2c) %in% rownames(ss2c)]
+
+
+dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in capsule between RC patients with and without metabolic syndrome.") %>%
+  kable_paper("hover", full_width = F)
+
+dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
+  kable_paper("hover", full_width = F)
+dge2c <- dge
 
 ```
 
 
-
-## Nonparametric analysis
-
-Looking at gene ranks might be a better option for comparisons across batches.
-
-The rank() function give the rank from lowest to highest and I'll use this for wilcox test.
-
-
-
-```{r,rank1}
-
-r <- apply(xx,2,rank)
-
-ctrl <- which(colnames(r) <70)
-case <- which(colnames(r) >70)
-
-suppressWarnings(
-wtres <- t(apply(r,1,function(x) {
-  wt <- wilcox.test(x[case] ,  x[ctrl] )
-  meanrankdiff <- mean(x[case]) - mean(x[ctrl])
-  unname(c(meanrankdiff,wt$p.value))
-})))
-
-colnames(wtres) <- c("meanrankdiff","pvalue")
-wtres <- as.data.frame(wtres)
-wtres <- wtres[order(wtres$pvalue),]
-wtres$fdr <- p.adjust(wtres$pvalue)
-
-top <- head(wtres,50)
-top <- top[order(top$meanrankdiff),]
-
-plot(top$meanrankdiff,1:nrow(top),bty="none",xlab="mean rank difference",ylab="gene",pch=19,cex=2,col="gray",main="Top differentially regulated genes")
-labels <- sapply(strsplit(rownames(top)," "),"[[",2)
-text(top$meanrankdiff,1:nrow(top),labels=labels,cex=0.7)
-
-top
-
-```
-
-## Pathway enrichment
-
-Here I'm using the mitch package and gene pathways from Reactome to understand the affected pathways separately for each tissue type.
-
-Reactome pathways downloaded 9th Dec 2021.
-
-```{r,mitch2}
-
-wtres$stat <- -log10(wtres$pvalue) * sign(wtres$meanrankdiff)
-wtres$gene <- sapply(strsplit(rownames(wtres)," "),"[[",2)
-
-wtres2<-wtres[,c("stat","gene")]
-wtres2 <- aggregate(. ~ gene, wtres2, max)
-rownames(wtres2) <- wtres2$gene
-wtres2$gene=NULL
-
-m2 <- mitch_calc(wtres2, genesets, priority="effect")
-head(m2$enrichment_result,20) %>% kbl(caption = "Top gene pathway differences using the nonparametric DE data") %>% kable_paper("hover", full_width = F)
-
-m2top <- subset(m2$enrichment_result,p.adjustANOVA<0.05)    
-m2up <- subset(m2top,s.dist>0)$set
-m2dn <- subset(m2top,s.dist<0)$set
-
-```
-
-## Compare parametric and nonparametric analyses
-
-These analyses gave similar results, so it suggests that there might not be such a huge batch effect impacting the results.
-
-```{r,euler1}
-
-
-v0 <- list("para up"=m1up,"para dn"=m1dn, "nonp up"=m2up, "nonp dn"=m2dn)
-
-str(v0)
-
-plot(euler(v0),quantities = TRUE, edges = "gray", main="Parametric and nonparametric DE analysis")
-
-```
-
-## Conclusion
-
-Based on the gene expression data, my guess is that there is no major technical batch effect between the two sample groups.
-That said, we can't be 100% sure that the differences observed are due to biological differences and not batch effects.
-To be certain, it would be a good idea to perform some validation analysis, either by testing the expression of some of these
-genes with another method like RTqPCR, or testing pathway activation biochemically.
-
-As OA is thought to associate with inflammation, I was expecting to see these pathways activated.
-However OA is different to rheumatoid arthritis which definitely has an autoimmune component to it.
-
-What we did observe was a downregulation of many signaling pathways such as RORA, RAC1, NOTCH2, CREB1, PI3K and others, 
-while translation, amino acid recycling, nonsense mediated decay, degradation of mitotic proteins, and p53 pathways were upregulated.
 
 ## Session information
 
