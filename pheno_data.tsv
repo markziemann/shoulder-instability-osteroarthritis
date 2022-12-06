@@ -158,3 +158,9 @@ AD-CAB_4020	OA	98	synovium	20S_S59_L001_R1_001.fastq.gz	pvt	62	M	Yes	No	Anatomic
 AD-CAB_4007	OA	85	synovium	7S_S46_L001_R1_001.fastq.gz	pvt	72	M	Yes	No	Anatomic	Right	184	118	35	2	Ever_smoker	No	Yes	Yes	No	12.7	66	90	5.8	5.6	5.6	Yes	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 AD-CAB_4008	OA	86	synovium	8S_S47_L002_R1_001.fastq.gz	pub	70	M	Yes	No	Anatomic	Right	172	86	29	2	Never_smoker	No	No	Yes	No	2.9	103	64	7.9	5.6	5.6	No	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
 AD-CAB_4009	OA	88	synovium	9S_S48_L001_R1_001.fastq.gz	pvt	72	M	No	Yes	Reverse	Right	167	80	29	3	Ever_smoker	No	Yes	Yes	No	2.9	107	59	6.7	5.8	5.5	No	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4001	OA	84	synovium	4001-41S_R1_001.fastq.gz	pvt	69	F	Yes	No	Anatomic	Left	158	89	36	2	Never_smoker	No	Yes	Yes	Yes	2.9	66	82	5.2	5.7	6.1	Yes	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4002	OA	80	synovium	4002-42S_R1_001.fastq.gz	pvt	59	M	Yes	No	Anatomic	Left	182	106	32	1	Ever_smoker	No	Yes	No	No	9.3	69	90	4.3	6.2	5.4	Yes	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4003	OA	81	synovium	4003-43S_R1_001.fastq.gz	pvt	74	F	No	Yes	Reverse	Right	153	87	37	2	Ever_smoker	No	Yes	Yes	No	6.9	77	66	5	5.4	5.4	Yes	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4004	OA	82	synovium	4004-44S_R1_001.fastq.gz	pvt	69	F	Yes	No	Anatomic	Left	165	85	32	2	Never_smoker	No	Yes	Yes	Yes	3.9	61	89	5.8	5.8	5.6	Yes	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4005	OA	83	synovium	4005-45S_R1_001.fastq.gz	pvt	74	F	Yes	No	Anatomic	Left	169	75	26	2	Ever_smoker	No	Yes	Yes	No	2.9	90	72	6.6	5.2	5.7	No	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+AD-CAB_4006	OA	78	synovium	4006-46S_R1_001.fastq.gz	pvt	81	F	Yes	No	Anatomic	Right	150	54	24	3	Never_smoker	No	Yes	Yes	No	2.9	105	43	10.5	5.6	6	No	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
