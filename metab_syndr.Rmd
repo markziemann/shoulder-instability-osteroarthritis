@@ -254,6 +254,10 @@ dim(x0b)
 x0b <- x0b[,order(colnames(x0b))]
 ss0b <- ss0b[order(rownames(ss0b)),]
 
+ss0b %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
+
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Primary_OA)
 res <- DESeq(dds)
@@ -383,6 +387,10 @@ dim(x1b)
 x1b <- x1b[,order(colnames(x1b))]
 ss1b <- ss1b[order(rownames(ss1b)),]
 
+ss1b %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
+
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Metabolic_Syndrome )
 res <- DESeq(dds)
@@ -438,6 +446,10 @@ dim(x1c)
 
 x1c <- x1c[,order(colnames(x1c))]
 ss1c <- ss1c[order(rownames(ss1c)),]
+
+ss1c %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
 
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Metabolic_Syndrome )
@@ -503,6 +515,10 @@ ss2c <- ss2c[order(rownames(ss2c)),]
 
 ss2c <- subset(ss2c,Metabolic_Syndrome=="No" | Metabolic_Syndrome=="Yes")
 x2c <- x2c[,colnames(x2c) %in% rownames(ss2c)]
+
+ss2c %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
 
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Metabolic_Syndrome )
