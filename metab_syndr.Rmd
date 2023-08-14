@@ -29,6 +29,9 @@ the international diabetes federation definition.
 
 Also I will conduct a comparison of cuff arth to primary OA control for age sex and CRP.
 
+## Load libraries and custom plot functions.
+
+Packages.
 
 ```{r,packages}
 
@@ -50,7 +53,7 @@ suppressPackageStartupMessages({
 
 ```
 
-## Functions for plots
+Functions.
 
 ```{r,plotfunc}
 
@@ -114,6 +117,10 @@ rownames(ss) <- gsub("-",".",rownames(ss))
 
 ss <- ss[order(rownames(ss)),]
 
+ss %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
+
 ```
 
 ## Import read counts
@@ -154,14 +161,18 @@ if ( !file.exists("counts.rds") ) {
 
 ```
 
-Runninig some checks to ensure that the sample sheet matches the list of datasets.
+Running some checks to ensure that the sample sheet matches the list of datasets.
 
 ```{r,check}
 
+message("Dimesions of sample sheet:")
 dim(ss)
+
+message("Dimesions of count matrix:")
 dim(axx)
 
-duplicated(colnames(axx))
+message("Number of duplicated samples in the count matrix:")
+length(which(duplicated(colnames(axx))))
 
 message("sample sheet entries with matching datasets")
 length(which(rownames(ss) %in% colnames(axx)))
@@ -223,28 +234,39 @@ ss0b %>%
   kbl(caption = "sample sheet for cuff arth vs OA (bone)") %>%
   kable_paper("hover", full_width = F)
 
+message("Metabolic syndrome classification")
 ss0b$Metabolic_Syndrome
+
+message("Age data")
 ss0b$Age
+
+message("Sex data")
 ss0b$Sex
 
 x0b <- axx[,colnames(axx) %in% rownames(ss0b)]
+message("count matrix dimensions before filtering out low genes")
 dim(x0b)
+
+message("count matrix dimensions after filtering out low genes")
 x0b <- x0b[which(rowMeans(x0b)>=10),]
 dim(x0b)
 
 x0b <- x0b[,order(colnames(x0b))]
 ss0b <- ss0b[order(rownames(ss0b)),]
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Primary_OA)
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
   kable_paper("hover", full_width = F)
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Age + Sex + CRP + Primary_OA )
 res <- DESeq(dds)
 z<- results(res)
@@ -276,18 +298,27 @@ ss0c %>%
   kbl(caption = "sample sheet for cuff arth vs OA (capsule)") %>%
   kable_paper("hover", full_width = F)
 
+message("Metabolic syndrome classification")
 ss0c$Metabolic_Syndrome
+
+message("Age data")
 ss0c$Age
+
+message("Sex data")
 ss0c$Sex
 
 x0c <- axx[,colnames(axx) %in% rownames(ss0c)]
+message("count matrix dimensions before filtering out low genes")
 dim(x0c)
+
 x0c <- x0c[which(rowMeans(x0c)>=10),]
+message("count matrix dimensions after filtering out low genes")
 dim(x0c)
 
 x0c <- x0c[,order(colnames(x0c))]
 ss0c <- ss0c[order(rownames(ss0c)),]
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0c , colData = ss0c, design = ~ Primary_OA)
 res <- DESeq(dds)
 z<- results(res)
@@ -298,6 +329,7 @@ dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
   kable_paper("hover", full_width = F)
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0c , colData = ss0c, design = ~ Age + Sex + CRP + Primary_OA )
 res <- DESeq(dds)
 z<- results(res)
@@ -331,37 +363,50 @@ ss1 <- subset(ss,Case=="OA")
 
 ss1b <- subset(ss1,Tissue=="bone")
 
+message("Metabolic syndrome classification")
 ss1b$Metabolic_Syndrome
+
+message("Age data")
 ss1b$Age
+
+message("Sex data")
 ss1b$Sex
 
 x1b <- axx[,colnames(axx) %in% rownames(ss1b)]
+message("count matrix dimensions before filtering out low genes")
 dim(x1b)
+
 x1b <- x1b[which(rowMeans(x1b)>=10),]
+message("count matrix dimensions after filtering out low genes")
 dim(x1b)
 
 x1b <- x1b[,order(colnames(x1b))]
 ss1b <- ss1b[order(rownames(ss1b)),]
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome.") %>%
   kable_paper("hover", full_width = F)
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
+
 dge1b <- dge
 
 ```
@@ -374,37 +419,50 @@ ss1 <- subset(ss,Case=="OA")
 
 ss1c <- subset(ss1,Tissue=="capsule")
 
+message("Metabolic syndrome classification")
 ss1c$Metabolic_Syndrome
+
+message("Age data")
 ss1c$Age
+
+message("Sex data")
 ss1c$Sex
 
 x1c <- axx[,colnames(axx) %in% rownames(ss1c)]
+message("count matrix dimensions before filtering out low genes")
 dim(x1c)
+
 x1c <- x1c[which(rowMeans(x1c)>=10),]
+message("count matrix dimensions after filtering out low genes")
 dim(x1c)
 
 x1c <- x1c[,order(colnames(x1c))]
 ss1c <- ss1c[order(rownames(ss1c)),]
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome.") %>%
   kable_paper("hover", full_width = F)
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
+
 dge1c <- dge
 
 ```
@@ -423,13 +481,21 @@ ss2 <- subset(ss,Case=="RC")
 
 ss2c <- subset(ss2,Tissue=="capsule")
 
+message("Metabolic syndrome classification")
 ss2c$Metabolic_Syndrome
+
+message("Age data")
 ss2c$Age
+
+message("Sex data")
 ss2c$Sex
 
 x2c <- axx[,colnames(axx) %in% rownames(ss2c)]
+message("count matrix dimensions before filtering out low genes")
 dim(x2c)
+
 x2c <- x2c[which(rowMeans(x2c)>=10),]
+message("count matrix dimensions after filtering out low genes")
 dim(x2c)
 
 x2c <- x2c[,order(colnames(x2c))]
@@ -438,31 +504,33 @@ ss2c <- ss2c[order(rownames(ss2c)),]
 ss2c <- subset(ss2c,Metabolic_Syndrome=="No" | Metabolic_Syndrome=="Yes")
 x2c <- x2c[,colnames(x2c) %in% rownames(ss2c)]
 
-
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in capsule between RC patients with and without metabolic syndrome.") %>%
   kable_paper("hover", full_width = F)
 
+message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
+
 dge[1:20,1:6] %>%
   kbl(caption = "Top DEGs in bone between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
+
 dge2c <- dge
 
 ```
-
-
 
 ## Session information
 
