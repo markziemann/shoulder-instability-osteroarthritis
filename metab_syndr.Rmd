@@ -419,6 +419,31 @@ dge1b <- dge
 
 ```
 
+Now run a mitch analysis.
+
+
+```{r,mitch1b}
+
+gnames <- sapply(strsplit(sub("\\."," ",sub("\\."," ",rownames(axx))) ," "),"[[",3)
+gt <- data.frame(rownames(axx),gnames)
+
+gs <- gmt_import("ReactomePathways_2023-09-01.gmt")
+
+dge1b$gn <- sapply(strsplit( sub("\\.","_", ( sub("\\.","_",rownames(dge1b)) ) ), "_"),"[[",3)
+
+m <- mitch_import(x=dge1b,DEtype="DESeq2",geneTable=gt)
+
+mres1b <- mitch_calc(x=m,genesets=gs,cores=16,priority="effect")
+
+head(mres1b$enrichment_result,20) %>%
+  kbl(caption = "Top Reactomes for dge1b") %>%
+  kable_paper("hover", full_width = F)
+
+mitch_report(res=mres1b,outfile="mitch1b_report.html",overwrite=TRUE)
+
+```
+
+
 ## The effect of metabolic syndrome in OA in capsule
 
 ```{r,dge1c}
