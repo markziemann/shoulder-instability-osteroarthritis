@@ -258,6 +258,8 @@ ss0b %>%
   kbl(caption = "sample sheet") %>%
   kable_paper("hover", full_width = F)
 
+plotMDS(x0b)
+
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0b , colData = ss0b, design = ~ Primary_OA)
 res <- DESeq(dds)
@@ -267,7 +269,7 @@ zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 
 dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
+  kbl(caption = "Top DEGs in bone between cuff arthropathy and OA patients (not correcting for age and sex)") %>%
   kable_paper("hover", full_width = F)
 
 message("here is the model spec:")
@@ -279,18 +281,18 @@ zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 
 dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients adjusted for age, sex and CRP.") %>%
+  kbl(caption = "Top DEGs in bone between cuff arthropathy and OA patients adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
 
 dge0b <- dge
 
-maplot(dge0b,"rotator cuff vs OA in bone")
-make_volcano(dge0b,"rotator cuff vs OA in bone")
-make_heatmap(dge0b,"rotator cuff vs OA in bone",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
+maplot(dge0b,"cuff arthropathy vs OA in bone")
+make_volcano(dge0b,"cuff arthropathy vs OA in bone")
+make_heatmap(dge0b,"cuff arthropathy vs OA in bone",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
 
 ```
 
-Now for rotator cuff vs OA in capsule.
+Now for cuff arthropathy vs OA in capsule.
 
 ```{r,dge0c}
 
@@ -322,6 +324,8 @@ dim(x0c)
 x0c <- x0c[,order(colnames(x0c))]
 ss0c <- ss0c[order(rownames(ss0c)),]
 
+plotMDS(x0c)
+
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x0c , colData = ss0c, design = ~ Primary_OA)
 res <- DESeq(dds)
@@ -330,7 +334,7 @@ vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients (not correcting for age and sex)") %>%
+  kbl(caption = "Top DEGs in bone between cuff arthropathy and OA patients (not correcting for age and sex)") %>%
   kable_paper("hover", full_width = F)
 
 message("here is the model spec:")
@@ -342,28 +346,30 @@ zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 
 dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in bone between rotator cuff and OA patients adjusted for age, sex and CRP.") %>%
+  kbl(caption = "Top DEGs in bone between cuff arthropathy and OA patients adjusted for age, sex and CRP.") %>%
   kable_paper("hover", full_width = F)
 
 dge0c <- dge
 
-maplot(dge0c,"rotator cuff vs OA in capsule")
-make_volcano(dge0c,"rotator cuff vs OA in capsule")
-make_heatmap(dge0c,"rotator cuff vs OA in capsule",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
+maplot(dge0c,"cuff arthropathy vs OA in capsule")
+make_volcano(dge0c,"cuff arthropathy vs OA in capsule")
+make_heatmap(dge0c,"cuff arthropathy vs OA in capsule",groups=as.numeric(factor(ss0b$Primary_OA)),x0b,n=50)
 
 ```
 
-## The effect of metabolic syndrome in OA in bone
+## The effect of metabolic syndrome in OA 
 
 Need to:
 
 * select bone datasets only
 
+* select OA samples only
+
 * look at the effect of metabolic syndrome in OA (ss1).
 
-```{r,dge1b}
+```{r,dge1_b_oa}
 
-ss1 <- subset(ss,Case=="OA")
+ss1 <- subset(ss,Primary_OA=="Yes")
 
 ss1b <- subset(ss1,Tissue=="bone")
 
@@ -390,6 +396,8 @@ ss1b <- ss1b[order(rownames(ss1b)),]
 ss1b %>%
   kbl(caption = "sample sheet") %>%
   kable_paper("hover", full_width = F)
+
+plotMDS(x1b)
 
 message("here is the model spec:")
 dds <- DESeqDataSetFromMatrix(countData = x1b , colData = ss1b, design = ~ Metabolic_Syndrome )
@@ -422,7 +430,7 @@ dge1b <- dge
 Now run a mitch analysis.
 
 
-```{r,mitch1b}
+```{r,mitch1_b_oa}
 
 gnames <- sapply(strsplit(sub("\\."," ",sub("\\."," ",rownames(axx))) ," "),"[[",3)
 gt <- data.frame(rownames(axx),gnames)
@@ -439,78 +447,111 @@ head(mres1b$enrichment_result,20) %>%
   kbl(caption = "Top Reactomes for dge1b") %>%
   kable_paper("hover", full_width = F)
 
-mitch_report(res=mres1b,outfile="mitch1b_report.html",overwrite=TRUE)
+mitch_report(res=mres1b,outfile="mitch1boa_report.html",overwrite=TRUE)
 
 ```
 
-
-## The effect of metabolic syndrome in OA in capsule
-
-```{r,dge1c}
-
-ss1 <- subset(ss,Case=="OA")
-
-ss1c <- subset(ss1,Tissue=="capsule")
-
-message("Metabolic syndrome classification")
-ss1c$Metabolic_Syndrome
-
-message("Age data")
-ss1c$Age
-
-message("Sex data")
-ss1c$Sex
-
-x1c <- axx[,colnames(axx) %in% rownames(ss1c)]
-message("count matrix dimensions before filtering out low genes")
-dim(x1c)
-
-x1c <- x1c[which(rowMeans(x1c)>=10),]
-message("count matrix dimensions after filtering out low genes")
-dim(x1c)
-
-x1c <- x1c[,order(colnames(x1c))]
-ss1c <- ss1c[order(rownames(ss1c)),]
-
-ss1c %>%
-  kbl(caption = "sample sheet") %>%
-  kable_paper("hover", full_width = F)
-
-message("here is the model spec:")
-dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Metabolic_Syndrome )
-res <- DESeq(dds)
-z<- results(res)
-vsd <- vst(dds, blind=FALSE)
-zz <- cbind(as.data.frame(z),assay(vsd))
-dge <- as.data.frame(zz[order(zz$pvalue),])
-
-dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome.") %>%
-  kable_paper("hover", full_width = F)
-
-message("here is the model spec:")
-dds <- DESeqDataSetFromMatrix(countData = x1c , colData = ss1c, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
-res <- DESeq(dds)
-z<- results(res)
-vsd <- vst(dds, blind=FALSE)
-zz <- cbind(as.data.frame(z),assay(vsd))
-dge <- as.data.frame(zz[order(zz$pvalue),])
-
-dge[1:20,1:6] %>%
-  kbl(caption = "Top DEGs in capsule between OA patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
-  kable_paper("hover", full_width = F)
-
-dge1c <- dge
-
-```
-
-## The effect of metabolic syndrome in rotator cuff arthropathy in capsule
+## The effect of metabolic syndrome in cuff arthropathy - consider all tissues
 
 Need to:
 
-* select bone datasets only
+* select cuff arthropathy samples only
 
 * look at the effect of metabolic syndrome in OA (ss1).
+
+* consider tissues as "batches" to correct for.
+
+* Unfortunately it isn't possible to correct for participant "batches" at the same time.
+
+```{r,dge1_b_ca}
+
+ss1 <- subset(ss,Cuff_Arthropathy=="Yes")
+
+message("Metabolic syndrome classification")
+ss1$Metabolic_Syndrome
+
+message("Age data")
+ss1$Age
+
+message("Sex data")
+ss1$Sex
+
+x1 <- axx[,colnames(axx) %in% rownames(ss1)]
+message("count matrix dimensions before filtering out low genes")
+dim(x1)
+
+x1 <- x1[which(rowMeans(x1)>=10),]
+message("count matrix dimensions after filtering out low genes")
+dim(x1)
+
+x1 <- x1[,order(colnames(x1))]
+ss1 <- ss1[order(rownames(ss1)),]
+
+ss1 %>%
+  kbl(caption = "sample sheet") %>%
+  kable_paper("hover", full_width = F)
+
+plotMDS(x1)
+
+message("here is the model spec:")
+dds <- DESeqDataSetFromMatrix(countData = x1 , colData = ss1, design = ~ Tissue + Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs that are altered in all tissues by metabolic syndrome.") %>%
+  kable_paper("hover", full_width = F)
+
+message("here is the model spec:")
+dds <- DESeqDataSetFromMatrix(countData = x1 , colData = ss1, design = ~ Age + Sex + CRP + Metabolic_Syndrome )
+res <- DESeq(dds)
+z<- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+
+dge[1:20,1:6] %>%
+  kbl(caption = "Top DEGs in bone between cuff arthropathy patients with and without metabolic syndrome, adjusted for age, sex and CRP.") %>%
+  kable_paper("hover", full_width = F)
+
+dge1 <- dge
+
+```
+
+Now run a mitch analysis.
+
+```{r,mitch1}
+
+gnames <- sapply(strsplit(sub("\\."," ",sub("\\."," ",rownames(axx))) ," "),"[[",3)
+gt <- data.frame(rownames(axx),gnames)
+
+gs <- gmt_import("ReactomePathways_2023-09-01.gmt")
+
+dge1$gn <- sapply(strsplit( sub("\\.","_", ( sub("\\.","_",rownames(dge1)) ) ), "_"),"[[",3)
+
+m <- mitch_import(x=dge1,DEtype="DESeq2",geneTable=gt)
+
+mres1 <- mitch_calc(x=m,genesets=gs,cores=16,priority="effect")
+
+head(mres1$enrichment_result,20) %>%
+  kbl(caption = "Top Reactomes for dge1b") %>%
+  kable_paper("hover", full_width = F)
+
+mitch_report(res=mres1,outfile="mitch1_report.html",overwrite=TRUE)
+
+```
+
+## The effect of metabolic syndrome in rotator cuff
+
+Need to:
+
+* Select rotator cuff
+
+* look at the effect of metabolic syndrome.
+
 
 ```{r,dge2b}
 
@@ -545,8 +586,10 @@ ss2c %>%
   kbl(caption = "sample sheet") %>%
   kable_paper("hover", full_width = F)
 
+plotMDS(x2c)
+
 message("here is the model spec:")
-dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Metabolic_Syndrome )
+dds <- DESeqDataSetFromMatrix(countData = x2c , colData = ss2c, design = ~ Age + Sex + Metabolic_Syndrome )
 res <- DESeq(dds)
 z<- results(res)
 vsd <- vst(dds, blind=FALSE)
