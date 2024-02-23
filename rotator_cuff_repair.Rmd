@@ -1,0 +1,245 @@
+---
+title: "Shoulder transcriptome analysis: rotator cuff repair"
+author: "Mark Ziemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 7
+    fig_height: 7
+theme: cosmo
+---
+
+Source: https://github.com/markziemann/shoulder-instability-osteroarthritis
+
+# Introduction
+
+Predict gene expression profile in capsular tissue biopsies of patients undergoing rotator
+cuff repair (AD-CAB 3001 to AD-CAB 3026) using capsular tissue biopsies in patients undergoing
+shoulder replacement for primary OA (AD-CAB 4001-4020, 'Yes' column 10 'Primary OA') or
+Rotator cuff arthropathy (AD-CAB 4001-4020, 'Yes' column 11 'Cuff arthropathy')?
+(adjusting for age and sex also).
+
+* First step, do a PCA of these 3 groups (RCR, OA, RCA) and comparison expression profiles.
+
+```{r,packages}
+
+suppressPackageStartupMessages({
+    library("R.utils")
+    library("zoo")
+    library("tidyverse")
+    library("reshape2")
+    library("DESeq2")
+    library("gplots")
+    library("fgsea")
+    library("MASS")
+    library("mitch")
+    library("eulerr")
+    library("limma")
+    library("topconfects")
+    library("kableExtra")
+})
+
+```
+
+## Import count data and sample sheet
+
+caps_rcr= capsule rotator cuff repair.
+
+caps_oa= capsule of primary OA
+
+caps_rca= capsule rotator cuff arthropathy
+
+caps_all= includes all three above groups.
+
+```{r,samplesheet}
+
+x <- readRDS("counts.rds")
+
+ss <- read.table("samplesheets/pheno_data.tsv",header=TRUE)
+head(ss,3)
+
+sapply(strsplit(gsub("-",".",gsub("_L001","|",gsub("_R1","|",ss$fastq))),"\\|"),"[[",1) %in% colnames(x)
+ss$data <- sapply(strsplit(gsub("-",".",gsub("_L001","|",gsub("_R1","|",ss$fastq))),"\\|"),"[[",1) 
+
+rownames(ss)<-ss$data
+
+caps <- subset(ss,Tissue=="capsule")
+head(caps,2)
+dim(caps)
+
+caps_rcr <- caps[grep("_30",caps$Participant_ID),]
+head(caps_rcr,3)
+dim(caps_rcr)
+caps_rcr$group="rcr"
+caps_rcr %>% kbl(caption = "Capsule samples of rotator cuff repair group") %>% kable_paper("hover", full_width = F)
+
+
+caps_oa <- subset(caps,Primary_OA=="Yes")
+head(caps_oa,3)
+dim(caps_oa)
+caps_oa$group="oa"
+caps_oa %>% kbl(caption = "Capsule samples of primary OA group") %>% kable_paper("hover", full_width = F)
+
+caps_rca <- subset(caps,Cuff_Arthropathy=="Yes")
+head(caps_rca,3)
+dim(caps_rca)
+caps_rca$group="rca"
+caps_rca %>% kbl(caption = "Capsule samples of rotator cuff arthropathy group") %>% kable_paper("hover", full_width = F)
+
+caps_all <- rbind(caps_rcr,caps_oa,caps_rca)
+
+xcaps <- x[,which(colnames(x) %in% rownames(caps_all) )]
+
+dim(xcaps)
+dim(caps_all) # matches OK
+
+caps_all %>% kbl(caption = "Capsule samples") %>% kable_paper("hover", full_width = F)
+
+```
+
+## QC analysis
+
+First to look at the number of reads per data set.
+
+```{r,qc1,fig.height=7,fig.width=7}
+
+par(mar=c(5,8,3,1))
+barplot(colSums(xcaps),horiz=TRUE,las=1,xlab="Capsule reads")
+
+sums <- colSums(xcaps)
+sums <- sums[order(sums)]
+barplot(sums,horiz=TRUE,las=1,xlab="Capsule reads")
+abline(v=15000000,col="red")
+
+```
+
+## MDS plot
+
+Multidimensional scaling plot to show the variation between all samples, very similar to PCA.
+
+```{r,mds,fig.height=7,fig.width=7}
+
+mds <- cmdscale(dist(t(xcaps)))
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=19, cex=4 ,col="gray")
+text(mds, labels=rownames(mds) )
+
+rcr1 <- as.numeric(colnames(xcaps) %in% rownames(caps_rcr))*1
+oa2 <- as.numeric(colnames(xcaps) %in% rownames(caps_oa))*2
+rca3 <- as.numeric(colnames(xcaps) %in% rownames(caps_rca))*3
+
+mycols <- gsub("3","gray",gsub("2","pink",gsub("1","lightblue",as.character(rcr1+oa2+rca3))))
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=19, cex=4 ,col=mycols)
+text(mds, labels=rownames(mds) )
+mtext("RCR=lightblue, OA=pink, RCA=grey")
+
+```
+
+## Primary OA vs Rotator cuff arthropathy
+
+```{r,de1}
+
+ss1 <- rbind(caps_oa,caps_rca)
+ss1 <- ss1[order(rownames(ss1)),]
+
+x1 <- xcaps[,colnames(xcaps) %in% rownames(ss1)]
+x1 <- x1[,order(colnames(x1)),]
+
+colnames(x1) == rownames(ss1)
+
+x1f <- x1[which(rowMeans(x1)>10),]
+dim(x1)
+dim(x1f)
+
+dds <- DESeqDataSetFromMatrix(countData = x1f , colData = ss1, design = ~ Age +Sex + Cuff_Arthropathy )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between OA (ctrl) and Rotator cuff arthropathy (case)") %>%
+  kable_paper("hover", full_width = F)
+dge1 <- dge
+write.table(dge1,file="rc1.tsv",quote=FALSE,sep='\t')
+
+```
+
+## Primary OA vs Rotator cuff repair
+
+```{r,de2}
+
+ss2 <- rbind(caps_oa,caps_rcr)
+ss2 <- ss2[order(rownames(ss2)),]
+
+x2 <- xcaps[,colnames(xcaps) %in% rownames(ss2)]
+x2 <- x2[,order(colnames(x2)),]
+
+colnames(x2) == rownames(ss2)
+
+x2f <- x2[which(rowMeans(x2)>10),]
+dim(x2)
+dim(x2f)
+
+dds <- DESeqDataSetFromMatrix(countData = x2f , colData = ss2, design = ~ Age +Sex + group )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between OA (ctrl) and Rotator cuff repair (case)") %>%
+  kable_paper("hover", full_width = F)
+dge2 <- dge
+write.table(dge2,file="rc2.tsv",quote=FALSE,sep='\t')
+
+```
+
+## Rotator cuff repair vs Rotator cuff arthropathy
+
+```{r,de3}
+
+ss3 <- rbind(caps_rcr,caps_rca)
+ss3 <- ss3[order(rownames(ss3)),]
+
+x3 <- xcaps[,colnames(xcaps) %in% rownames(ss3)]
+x3 <- x3[,order(colnames(x3)),]
+
+colnames(x3) == rownames(ss3)
+
+x3f <- x3[which(rowMeans(x3)>10),]
+dim(x3)
+dim(x3f)
+
+ss3$group <- factor(ss3$group,levels=c("rcr","rca"))
+dds <- DESeqDataSetFromMatrix(countData = x3f , colData = ss3, design = ~ Age +Sex + group )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between OA (ctrl) and Rotator cuff repair (case)") %>%
+  kable_paper("hover", full_width = F)
+dge2 <- dge
+write.table(dge2,file="rc2.tsv",quote=FALSE,sep='\t')
+
+```
+## Session information
+
+For reproducibility.
+
+```{r,sessioninfo}
+
+sessionInfo()
+
+```
