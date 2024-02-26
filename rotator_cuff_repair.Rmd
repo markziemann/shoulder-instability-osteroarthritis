@@ -141,6 +141,21 @@ mtext("RCR=lightblue, OA=pink, RCA=grey")
 
 ```
 
+## Prep pathways
+
+```{r,pwprep}
+
+genesets <- gmt_import("ReactomePathways_2023-09-01.gmt")
+
+# gene table
+gt <- as.data.frame(rownames(x))
+#gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+gt[,1] <- sub("@",".",sub("\\."," ",(sub("\\.","@",gt[,1]))))
+gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+gt[,1] <- rownames(x)
+
+```
+
 ## Primary OA vs Rotator cuff arthropathy
 
 ```{r,de1}
@@ -169,6 +184,21 @@ head(dge,20) %>%
   kable_paper("hover", full_width = F)
 dge1 <- dge
 write.table(dge1,file="rc1.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m1 <- mitch_import(dge1, DEtype="deseq2",geneTable=gt)
+mres1 <- mitch_calc(m1, genesets, priority="effect")
+head(mres1$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between OA (ctrl) and Rotator cuff arthropathy (case)") %>%
+  kable_paper("hover", full_width = F)
+
+m1top <- subset(mres1$enrichment_result,p.adjustANOVA<0.05)
+m1up <- subset(m1top,s.dist>0)$set
+m1dn <- subset(m1top,s.dist<0)$set
+
+if (! file.exists("mitchres1.html") ) {
+  mitch_report(mres1,outfile="mitchres1.html",overwrite=FALSE)
+}
 
 ```
 
@@ -201,6 +231,21 @@ head(dge,20) %>%
 dge2 <- dge
 write.table(dge2,file="rc2.tsv",quote=FALSE,sep='\t')
 
+# mitch
+m2 <- mitch_import(dge2, DEtype="deseq2",geneTable=gt)
+mres2 <- mitch_calc(m2, genesets, priority="effect")
+head(mres2$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between OA (ctrl) and Rotator cuff repair (case)") %>%
+  kable_paper("hover", full_width = F)
+
+m2top <- subset(mres2$enrichment_result,p.adjustANOVA<0.05)
+m2up <- subset(m2top,s.dist>0)$set
+m2dn <- subset(m2top,s.dist<0)$set
+
+if (! file.exists("mitchres2.html") ) {
+  mitch_report(mres2,outfile="mitchres2.html",overwrite=FALSE)
+}
+
 ```
 
 ## Rotator cuff repair vs Rotator cuff arthropathy
@@ -228,12 +273,49 @@ vsd <- vst(dds, blind=FALSE)
 zz <- cbind(as.data.frame(z),assay(vsd))
 dge <- as.data.frame(zz[order(zz$pvalue),])
 head(dge,20) %>%
-  kbl(caption = "Top gene expression differences between OA (ctrl) and Rotator cuff repair (case)") %>%
+  kbl(caption = "Top gene expression differences between Rotator cuff repair (ctrl) and Rotator cuff arthropathy (case)") %>%
   kable_paper("hover", full_width = F)
-dge2 <- dge
-write.table(dge2,file="rc2.tsv",quote=FALSE,sep='\t')
+dge3 <- dge
+write.table(dge3,file="rc3.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m3 <- mitch_import(dge3, DEtype="deseq2",geneTable=gt)
+mres3 <- mitch_calc(m3, genesets, priority="effect")
+head(mres3$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between Rotator cuff repair (ctrl) and Rotator cuff arthropathy (case)") %>%
+  kable_paper("hover", full_width = F)
+
+m3top <- subset(mres3$enrichment_result,p.adjustANOVA<0.05)
+m3up <- subset(m3top,s.dist>0)$set
+m3dn <- subset(m3top,s.dist<0)$set
+
+if (! file.exists("mitchres1.html") ) {
+  mitch_report(mres3,outfile="mitchres3.html",overwrite=FALSE)
+}
 
 ```
+
+## Joint enrichment
+
+
+```{r,joint1}
+
+l1 <- list("OAvRCA"=dge1,"OAvRCR"=dge2)
+
+mm <- mitch_import(l1, DEtype="deseq2",geneTable=gt)
+
+mmres <- mitch_calc(mm, genesets, priority="effect")
+
+head(mmres$enrichment_result,20)  %>%
+  kbl(caption = "Top gene pathway differences in joint pathway analysis") %>%
+  kable_paper("hover", full_width = F)
+
+if (! file.exists("mitchmultires.html") ) {
+  mitch_report(mmres,outfile="mitchmultires.html",overwrite=FALSE)
+}
+
+```
+
 ## Session information
 
 For reproducibility.
