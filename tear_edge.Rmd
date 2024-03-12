@@ -309,7 +309,7 @@ if (! file.exists("tear_mitchres2.html") ) {
 
 ## Now run a mitch analysis to see the similarities/differences between tendon-tear for intact vs torn
 
-```{r,mitch3)
+```{r,mitch3}
 
 l1 <- list("intact"=dge1,"torn"=dge2)
 mm <- mitch_import(l1, DEtype="deseq2",geneTable=gt)
