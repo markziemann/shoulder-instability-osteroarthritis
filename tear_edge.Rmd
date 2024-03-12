@@ -1,0 +1,437 @@
+---
+title: "Shoulder transcriptome analysis: comparing healed vs unhealed tendon"
+author: "Mark Ziemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 7
+    fig_height: 7
+theme: cosmo
+---
+
+Source: https://github.com/markziemann/shoulder-instability-osteroarthritis
+
+# Introduction
+
+Compare “tear edge” (AD-CAB 3001-AD-CAB 3026) to the “tendon body” (AD-CAB 3001-AD-CAB 3026)
+in patients who heal as compared to those that don’t heal.
+In the sample sheet this is defines in the 'Tendon integrity 2 years post.op' column,
+designated 'torn' or 'intact', so that we are comparing like tissue.
+
+General steps are to load the sample sheet and profiling data,
+select the needed samples/groups, and then run MDS, DE and pathway analysis.
+
+```{r,packages}
+
+suppressPackageStartupMessages({
+    library("R.utils")
+    library("zoo")
+    library("tidyverse")
+    library("reshape2")
+    library("DESeq2")
+    library("gplots")
+    library("fgsea")
+    library("MASS")
+    library("mitch")
+    library("eulerr")
+    library("limma")
+    library("topconfects")
+    library("kableExtra")
+})
+
+```
+
+## Import count data and sample sheet
+
+Patients AD-CAB 3001-AD-CAB 3026.
+
+They have both "tear" (tear edge) and "tendon" (tendon body) samples from intact and torn tissue.
+
+```{r,samplesheet}
+
+x <- readRDS("counts.rds")
+
+ss <- read.table("samplesheets/pheno_data.tsv",header=TRUE)
+
+ss <- ss[grep("AD-CAB_3",ss$Participant_ID),]
+
+ss <- ss[which(ss$Tendon_integrity_2_years_post.op != "NA"),]
+ss <- ss[ss$Tissue != "capsule",]
+
+head(ss,3)
+
+table(ss$Tissue)
+table(ss$Tendon_integrity_2_years_post.op)
+
+table(paste(ss$Tissue ,ss$Tendon_integrity_2_years_post.op))
+
+paste(ss$Participant_ID,ss$Tissue ,ss$Tendon_integrity_2_years_post.op)
+
+sapply(strsplit(gsub("-",".",gsub("_L001","|",gsub("_R1","|",ss$fastq))),"\\|"),"[[",1) %in% colnames(x)
+
+ss$data <- sapply(strsplit(gsub("-",".",gsub("_L001","|",gsub("_R1","|",ss$fastq))),"\\|"),"[[",1)
+
+rownames(ss)<-ss$data
+
+```
+
+Now subset the data for the different comparisons.
+
+Tendon v tear (intact) versus Tendon v tear (torn).
+
+Comparisons:
+
+1. Tendon v tear (intact): DE1.
+
+2. Tendon v tear (torn): DE2.
+
+Then run a mitch analysis to see the differences.
+
+The other approach is to find the direct differences between intact and torn samples.
+
+3. tendon (intact) vs tendon (torn).
+
+4. tear (intact) vs tear (torn).
+
+```{r,subsets}
+
+#de1
+ss1 <- ss[ss$Tendon_integrity_2_years_post.op=="Intact",]
+x1 <- x[,which(colnames(x) %in% ss1$data)]
+ss1 %>% kbl(caption = "Intact tendon group") %>% kable_paper("hover", full_width = F)
+
+#de2
+ss2 <- ss[ss$Tendon_integrity_2_years_post.op=="Torn",]
+x2 <- x[,which(colnames(x) %in% ss2$data)]
+ss2 %>% kbl(caption = "Torn tendon group") %>% kable_paper("hover", full_width = F)
+
+#de3
+ss3 <- ss[ss$Tissue=="tendon",]
+x3 <- x[,which(colnames(x) %in% ss3$data)]
+ss3 %>% kbl(caption = "Tendon body samples") %>% kable_paper("hover", full_width = F)
+
+#de4
+ss4 <- ss[ss$Tissue=="tear",]
+x4 <- x[,which(colnames(x) %in% ss4$data)]
+ss4 %>% kbl(caption = "Tear edge samples") %>% kable_paper("hover", full_width = F)
+
+```
+
+## QC analysis
+
+First to look at the number of reads per data set.
+
+```{r,qc1,fig.height=7,fig.width=7}
+
+par(mar=c(5,8,3,1))
+barplot(colSums(x1),horiz=TRUE,las=1,xlab="Intact tendon group reads")
+abline(v=4e6,col="red",lty=2)
+
+barplot(colSums(x2),horiz=TRUE,las=1,xlab="Torn tendon group reads")
+abline(v=4e6,col="red",lty=2)
+
+barplot(colSums(x3),horiz=TRUE,las=1,xlab="Tendon body reads")
+abline(v=4e6,col="red",lty=2)
+
+barplot(colSums(x4),horiz=TRUE,las=1,xlab="Tear edge reads")
+abline(v=4e6,col="red",lty=2)
+
+```
+
+## Filter out low reads
+
+```{r,filt2}
+
+x1 <- x1[,colSums(x1)>4e6]
+x2 <- x2[,colSums(x2)>4e6]
+x3 <- x3[,colSums(x3)>4e6]
+x4 <- x4[,colSums(x4)>4e6]
+
+ss1 <- ss1[which(ss1$data %in% colnames(x1)),]
+ss2 <- ss2[which(ss2$data %in% colnames(x2)),]
+ss3 <- ss3[which(ss3$data %in% colnames(x3)),]
+ss4 <- ss4[which(ss4$data %in% colnames(x4)),]
+
+ss1 <- ss1[order(rownames(ss1)),]
+x1 <- x1[,order(colnames(x1))]
+
+ss2 <- ss2[order(rownames(ss2)),]
+x2 <- x2[,order(colnames(x2))]
+
+ss3 <- ss3[order(rownames(ss3)),]
+x3 <- x3[,order(colnames(x3))]
+
+ss4 <- ss4[order(rownames(ss4)),]
+x4 <- x4[,order(colnames(x4))]
+
+rownames(ss1) == colnames(x1)
+rownames(ss2) == colnames(x2)
+rownames(ss3) == colnames(x3)
+rownames(ss4) == colnames(x4)
+
+```
+
+## MDS plot
+
+Multidimensional scaling plot to show the variation between all samples, very similar to PCA.
+
+```{r,mds,fig.height=7,fig.width=7}
+
+xx <- cbind(x3,x4)
+ssx <- rbind(ss3,ss4)
+
+mds <- cmdscale(dist(t(xx)))
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=19, cex=4 ,col="gray")
+text(mds, labels=rownames(mds) )
+
+cols <- as.numeric(as.factor(ssx$Tendon_integrity_2_years_post.op))+1 #red=intact,green=torn
+shapes <- as.numeric(as.factor(ssx$Tissue))+14
+
+plot(mds, xlab="Coordinate 1", ylab="Coordinate 2",
+  type = "p",bty="n",pch=shapes, cex=2 ,col=cols)
+text(mds, labels=rownames(mds) )
+
+# Add a legend
+legend("top",
+  legend = c("tear intact", "tendon intact", "tear torn", "tendon torn"),
+  col= c("red","red","green","green"),
+  pch = c(15,16,15,16),
+  pt.cex = 2,
+  cex = 1.2 )
+
+```
+
+## Prep pathways
+
+```{r,pwprep}
+
+genesets <- gmt_import("ReactomePathways_2023-09-01.gmt")
+
+# gene table
+gt <- as.data.frame(rownames(x))
+#gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+gt[,1] <- sub("@",".",sub("\\."," ",(sub("\\.","@",gt[,1]))))
+gt$gene <- sapply(strsplit(gt[,1]," "),"[[",2)
+gt[,1] <- rownames(x)
+
+```
+
+## DE1: Tendon v tear (intact)
+
+```{r,de1}
+
+colnames(x1) == rownames(ss1)
+
+x1f <- x1[which(rowMeans(x1)>10),]
+dim(x1)
+dim(x1f)
+
+ss1$tissue <- factor(ss1$Tissue,levels=c("tendon","tear"))
+ss1$redcap <- as.character(ss1$Redcap_ID,ordered=FALSE) # unfortunately not possible to correct for patient of origin.
+
+dds <- DESeqDataSetFromMatrix(countData = x1f , colData = ss1, design = ~ Age + Sex + tissue )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between tendon (ctrl) and tear (case) of intact tissues") %>%
+  kable_paper("hover", full_width = F)
+dge1 <- dge
+write.table(dge1,file="tear1.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m1 <- mitch_import(dge1, DEtype="deseq2",geneTable=gt)
+mres1 <- mitch_calc(m1, genesets, priority="effect")
+head(mres1$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between tendon (ctrl) and tear (case) of intact tissues") %>%
+  kable_paper("hover", full_width = F)
+
+m1top <- subset(mres1$enrichment_result,p.adjustANOVA<0.05)
+m1up <- subset(m1top,s.dist>0)$set
+m1dn <- subset(m1top,s.dist<0)$set
+
+if (! file.exists("tear_mitchres1.html") ) {
+  mitch_report(mres1,outfile="tear_mitchres1.html",overwrite=FALSE)
+}
+
+```
+
+## DE2: Tendon v tear (torn)
+
+```{r,de2}
+
+colnames(x2) == rownames(ss2)
+
+x2f <- x2[which(rowMeans(x2)>10),]
+dim(x2)
+dim(x2f)
+
+ss2$tissue <- factor(ss2$Tissue,levels=c("tendon","tear"))
+ss2$redcap <- as.character(ss2$Redcap_ID,ordered=FALSE) # unfortunately not possible to correct for patient of origin.
+
+dds <- DESeqDataSetFromMatrix(countData = x2f , colData = ss2, design = ~ Age + Sex + tissue )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between tendon (ctrl) and tear (case) of torn tissues") %>%
+  kable_paper("hover", full_width = F)
+dge2 <- dge
+write.table(dge2,file="tear2.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m2 <- mitch_import(dge2, DEtype="deseq2",geneTable=gt)
+mres2 <- mitch_calc(m2, genesets, priority="effect")
+head(mres2$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between tendon (ctrl) and tear (case) of torn tissues") %>%
+  kable_paper("hover", full_width = F)
+
+m2top <- subset(mres2$enrichment_result,p.adjustANOVA<0.05)
+m2up <- subset(m2top,s.dist>0)$set
+m2dn <- subset(m2top,s.dist<0)$set
+
+if (! file.exists("tear_mitchres2.html") ) {
+  mitch_report(mres2,outfile="tear_mitchres2.html",overwrite=FALSE)
+}
+
+```
+
+## Now run a mitch analysis to see the similarities/differences between tendon-tear for intact vs torn
+
+```{r,mitch3)
+
+l1 <- list("intact"=dge1,"torn"=dge2)
+mm <- mitch_import(l1, DEtype="deseq2",geneTable=gt)
+mmres1 <- mitch_calc(mm, genesets, priority="effect")
+
+head(mmres1$enrichment_result,20) %>%
+  kbl(caption = "Top tendon-tear pathways in intact and torn samples") %>%
+  kable_paper("hover", full_width = F)
+
+if (! file.exists("tear_multimitchres1.html") ) {
+  mitch_report(mmres1,outfile="tear_multimitchres1.html",overwrite=FALSE)
+}
+
+# prioritise by SD to get the discordant pathways
+mmres1 <- mitch_calc(mm, genesets, priority="SD")
+
+head(mmres1$enrichment_result,20) %>%
+  kbl(caption = "Top tendon-tear pathways in intact and torn samples (discordant only)") %>%
+  kable_paper("hover", full_width = F)
+
+if (! file.exists("tear_multmitchres1_discord.html") ) {
+  mitch_report(mmres1,outfile="tear_multmitchres1_discord.html",overwrite=FALSE)
+}
+
+```
+
+The other approach is to find the direct differences between intact and torn samples.
+
+## DE3. tendon (intact) vs tendon (torn).
+
+```{r,de3}
+
+colnames(x3) == rownames(ss3)
+
+x3f <- x3[which(rowMeans(x3)>10),]
+dim(x3)
+dim(x3f)
+
+ss3$tissue <- factor(ss3$Tissue,levels=c("tendon","tear"))
+ss3$integrity <- factor(ss3$Tendon_integrity_2_years_post.op)
+
+dds <- DESeqDataSetFromMatrix(countData = x3f , colData = ss3, design = ~ Age + Sex + integrity )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between intact (ctrl) and torn (case) tendon.") %>%
+  kable_paper("hover", full_width = F)
+dge3 <- dge
+write.table(dge3,file="tear3.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m3 <- mitch_import(dge3, DEtype="deseq2",geneTable=gt)
+mres3 <- mitch_calc(m3, genesets, priority="effect")
+head(mres3$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between intact (ctrl) and torn (case) tendon.") %>%
+  kable_paper("hover", full_width = F)
+
+m3top <- subset(mres3$enrichment_result,p.adjustANOVA<0.05)
+m3up <- subset(m3top,s.dist>0)$set
+m3dn <- subset(m3top,s.dist<0)$set
+
+if (! file.exists("tear_mitchres3.html") ) {
+  mitch_report(mres3,outfile="tear_mitchres3.html",overwrite=FALSE)
+}
+
+```
+
+## DE4. tear (intact) vs tear (torn).
+
+```{r,de4}
+
+colnames(x4) == rownames(ss4)
+
+x4f <- x4[which(rowMeans(x4)>10),]
+dim(x4)
+dim(x4f)
+
+ss4$tissue <- factor(ss4$Tissue,levels=c("tendon","tear"))
+ss4$integrity <- factor(ss4$Tendon_integrity_2_years_post.op)
+
+dds <- DESeqDataSetFromMatrix(countData = x4f , colData = ss4, design = ~ Age + Sex + integrity )
+
+res <- DESeq(dds)
+z <- results(res)
+vsd <- vst(dds, blind=FALSE)
+zz <- cbind(as.data.frame(z),assay(vsd))
+dge <- as.data.frame(zz[order(zz$pvalue),])
+head(dge,20) %>%
+  kbl(caption = "Top gene expression differences between intact (ctrl) and torn (case) tear.") %>%
+  kable_paper("hover", full_width = F)
+dge4 <- dge
+write.table(dge4,file="tear4.tsv",quote=FALSE,sep='\t')
+
+# mitch
+m4 <- mitch_import(dge4, DEtype="deseq2",geneTable=gt)
+mres4 <- mitch_calc(m4, genesets, priority="effect")
+head(mres4$enrichment_result,20) %>%
+  kbl(caption = "Top gene pathway differences between intact (ctrl) and torn (case) tear.") %>%
+  kable_paper("hover", full_width = F)
+
+m4top <- subset(mres4$enrichment_result,p.adjustANOVA<0.05)
+m4up <- subset(m4top,s.dist>0)$set
+m4dn <- subset(m4top,s.dist<0)$set
+
+if (! file.exists("tear_mitchres4.html") ) {
+  mitch_report(mres4,outfile="tear_mitchres4.html",overwrite=FALSE)
+}
+
+```
+
+
+
+## Session information
+
+For reproducibility.
+
+```{r,sessioninfo}
+
+sessionInfo()
+
+```
