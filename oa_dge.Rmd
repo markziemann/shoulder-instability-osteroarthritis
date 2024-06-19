@@ -53,7 +53,7 @@ suppressPackageStartupMessages({
 
 ```{r,importdata}
 
-tmp <- read.table("3col.tsv.gz",header=F)
+tmp <- read.table("3col_oa.tsv.gz",header=F)
 x <- as.matrix(acast(tmp, V2~V1, value.var="V3", fun.aggregate = sum))
 x <- as.data.frame(x)
 accession <- sapply((strsplit(rownames(x),"\\|")),"[[",2)
@@ -313,13 +313,13 @@ make_heatmap(dges,"synovium",sss,xxs,n=20)
 
 Here I'm using the mitch package and gene pathways from Reactome to understand the affected pathways separately for each tissue type.
 
-Reactome pathways downloaded 24th Nov 2021.
+Reactome pathways downloaded Sept 2023.
 
 ```{r,mitch1}
 
 #download.file("https://reactome.org/download/current/ReactomePathways.gmt.zip", destfile="ReactomePathways.gmt.zip")
 #unzip("ReactomePathways.gmt.zip")
-genesets <- gmt_import("ReactomePathways.gmt")
+genesets <- gmt_import("ReactomePathways_2023-09-01.gmt")
 
 # gene table
 gt <- as.data.frame(rownames(xx))
