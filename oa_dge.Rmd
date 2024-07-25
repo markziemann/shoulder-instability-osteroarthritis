@@ -20,13 +20,13 @@ Here we are analysing the gene expression of six patients in these tissues.
 
 B: Bone
 
-C: Capsule 
+C: Capsule
 
 F: Fat
 
 M: Muscle
 
-S: Synovium 
+S: Synovium
 
 They have a range of QuickDASH scores which I will examine.
 
@@ -66,6 +66,7 @@ xx$geneid = NULL
 xx <- round(xx)
 colnames(xx) <- sapply(strsplit(colnames(xx),"-"),"[[",2)
 head(xx)
+write.table(xx,"quickdash.tsv",sep="\t")
 
 ```
 
@@ -377,16 +378,45 @@ x <- list("bone"=dgeb, "capsule"=dgec, "fat"=dgef , "muscle"=dgem, "synovium"=dg
 
 y <- mitch_import(x, DEtype="deseq2",geneTable=gt)
 
-heatmap.2(cor(y,method="s"),trace="none",scale="none",margins = c(10,10),main="Spearman correlation across tissues") 
+heatmap.2(cor(y,method="s"),trace="none",scale="none",margins = c(10,10),main="Spearman correlation across tissues")
 
 res <- mitch_calc(y, genesets, priority="significance")
 
-head(res$enrichment_result,30) %>% kbl(caption = "Top gene pathway correlates with QuickDASH across all tissues") %>% kable_paper("hover", full_width = F)
+head(res$enrichment_result,30) %>%
+  kbl(caption = "Top gene pathway correlates with QuickDASH across all tissues - prioritised by p-value") %>%
+  kable_paper("hover", full_width = F)
 
 pw <- res$enrichment_result[1:30,4:8]
 rownames(pw) <- res$enrichment_result[1:30,1]
+
+colfunc <- colorRampPalette(c("blue", "white", "red"))
+
 heatmap.2(as.matrix(pw),trace="none",col=colfunc(25),scale="none", margins = c(10,25), cexRow=0.6,cexCol=0.7,
-    main="Top ranked pathways")
+    main="Top ranked pathways (p-val)")
+
+res2 <- mitch_calc(y, genesets, priority="effect")
+
+head(subset(res2$enrichment_result,p.adjustMANOVA<0.05),30)  %>%
+  kbl(caption = "Top gene pathway correlates with QuickDASH across all tissues - prioritised by effect size") %>%
+  kable_paper("hover", full_width = F)
+
+pw <- subset(res2$enrichment_result,p.adjustMANOVA<0.05)[1:30,4:8]
+rownames(pw) <- res2$enrichment_result[1:30,1]
+
+heatmap.2(as.matrix(pw),trace="none",col=colfunc(25),scale="none", margins = c(10,25), cexRow=0.6,cexCol=0.7,
+    main="Top ranked pathways (ES)")
+
+res3 <- mitch_calc(y, genesets, priority="SD")
+
+head(subset(res3$enrichment_result,p.adjustMANOVA<0.05),30) %>%
+  kbl(caption = "Top gene pathway correlates with QuickDASH across all tissues - prioritised by standard deviation") %>%
+  kable_paper("hover", full_width = F)
+
+pw <- subset(res3$enrichment_result,p.adjustMANOVA<0.05)[1:30,4:8]
+rownames(pw) <- res3$enrichment_result[1:30,1]
+
+heatmap.2(as.matrix(pw),trace="none",col=colfunc(25),scale="none", margins = c(10,25), cexRow=0.6,cexCol=0.7,
+    main="Top ranked pathways (SD)")
 
 ```
 
